@@ -110,6 +110,11 @@ export function formatShortDateTime(date: Date): string {
   return `${shortTimeFormat().format(date)} ${shortDateFormat().format(date).replace(/\//g, '.')}`;
 }
 
+export function formatDateThenTime(date: Date): string {
+  if (!isValid(date)) return '—';
+  return `${shortDateFormat().format(date).replace(/\//g, '.')} | ${shortTimeFormat().format(date)}`;
+}
+
 export function formatFullTimestamp(date: Date): string {
   if (!isValid(date)) return '—';
   return `${fullTimestampFormat().format(date)} (${formatTimeZoneLabel(date)})`;

@@ -187,6 +187,13 @@ function rowsOf(tableName: RegExp | string): string[] {
     .map((row) => row.textContent ?? '');
 }
 
+function columnsOf(tableName: RegExp | string): string[] {
+  const table = screen.getByRole('table', { name: tableName });
+  return within(table)
+    .getAllByRole('columnheader')
+    .map((cell) => cell.textContent ?? '');
+}
+
 describe('App dashboard', () => {
   beforeEach(() => {
     vi.mocked(api.fetchScaleSets).mockResolvedValue(mockScaleSets);
@@ -224,12 +231,92 @@ describe('App dashboard', () => {
     await screen.findByRole('table', { name: /job queue/i });
 
     const rows = rowsOf(/job queue/i);
-    expect(rows.some((row) => row.includes('web-app/release/1.4') && row.includes('priya-s'))).toBe(true);
     expect(
-      rows.some((row) => row.includes('web-app/feature/telemetry-export') && row.includes('amira-k')),
+      rows.some(
+        (row) => row.includes('web-app') && row.includes('release/1.4') && row.includes('priya-s'),
+      ),
+    ).toBe(true);
+    expect(
+      rows.some(
+        (row) =>
+          row.includes('web-app') &&
+          row.includes('feature/telemetry-export') &&
+          row.includes('amira-k'),
+      ),
     ).toBe(true);
 
     expect(rows.some((row) => row.includes('acme/'))).toBe(false);
+  });
+
+  test('the repository and the branch are separate columns, in the same order everywhere', async () => {
+    renderApp();
+    await screen.findByRole('table', { name: /job queue/i });
+    await screen.findByRole('table', { name: /running jobs/i });
+    await screen.findByRole('table', { name: /job history/i });
+
+    expect(columnsOf(/job queue/i)).toEqual([
+      'Job',
+      'Repository',
+      'Branch',
+      'Triggered by',
+      'Queued for',
+      'Waiting',
+    ]);
+    expect(columnsOf(/running jobs/i)).toEqual([
+      'Job',
+      'Repository',
+      'Branch',
+      'Triggered by',
+      'Scale set',
+      'Running for',
+      'Started at',
+    ]);
+    expect(columnsOf(/job history/i)).toEqual([
+      'Job',
+      'Repository',
+      'Branch',
+      'Triggered by',
+      'Scale set',
+      'Duration',
+      'Finished at',
+      'Result',
+    ]);
+  });
+
+  test('the repository and the branch each sort on their own', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await screen.findByRole('table', { name: /job queue/i });
+
+    const queue = () => screen.getByRole('table', { name: /job queue/i });
+    const found = (names: string[]) =>
+      rowsOf(/job queue/i)
+        .slice(1)
+        .map((row) => names.find((name) => row.includes(name)));
+
+    await user.click(within(queue()).getByRole('button', { name: /^branch$/i }));
+    expect(found(['feature/telemetry-export', 'main', 'release/1.4'])).toEqual([
+      'feature/telemetry-export',
+      'main',
+      'release/1.4',
+    ]);
+
+    await user.click(within(queue()).getByRole('button', { name: /^repository$/i }));
+    expect(found(['infra-tools', 'web-app'])).toEqual(['infra-tools', 'web-app', 'web-app']);
+  });
+
+  test('a finished job carries the date and then the clock time', async () => {
+    renderApp();
+    await screen.findByRole('table', { name: /job history/i });
+
+    expect(rowsOf(/job history/i)[1]).toMatch(/\d{2}\.\d{2} \| \d{2}:\d{2}/);
+  });
+
+  test('a running job carries the date and then the clock time', async () => {
+    renderApp();
+    await screen.findByRole('table', { name: /running jobs/i });
+
+    expect(rowsOf(/running jobs/i)[1]).toMatch(/\d{2}\.\d{2} \| \d{2}:\d{2}/);
   });
 
   test('the runner card is a header with the total and the three states stacked under it', async () => {
@@ -291,7 +378,7 @@ describe('App dashboard', () => {
     expect(longIndex).toBeLessThan(shortIndex);
   });
 
-  test('the job name is the only link in a row, with no arrow glyph on it', async () => {
+  test('the job, the repository and the branch each link out, with no arrow glyph on them', async () => {
     renderApp();
     await screen.findByRole('table', { name: /job queue/i });
 
@@ -301,7 +388,47 @@ describe('App dashboard', () => {
     expect(link).toHaveAccessibleName(/opens on github\.com/i);
 
     const queue = screen.getByRole('table', { name: /job queue/i });
-    expect(within(queue).queryByRole('link', { name: /^Repository /i })).not.toBeInTheDocument();
+    const repository = within(queue).getByRole('link', { name: /^Repository acme\/infra-tools/i });
+    expect(repository).toHaveAttribute('href', 'https://github.com/acme/infra-tools');
+    expect(repository.textContent).toBe('infra-tools');
+    expect(repository).toHaveAttribute('target', '_blank');
+    expect(repository).toHaveAttribute('rel', 'noopener noreferrer');
+
+    const branch = within(queue).getByRole('link', { name: /^Branch main in acme\/infra-tools/i });
+    expect(branch).toHaveAttribute('href', 'https://github.com/acme/infra-tools/tree/main');
+    expect(branch.textContent).toBe('main');
+  });
+
+  test('a branch with a slash keeps its slashes in the link github expects', async () => {
+    renderApp();
+    await screen.findByRole('table', { name: /job queue/i });
+
+    const branch = screen.getByRole('link', {
+      name: /^Branch feature\/telemetry-export in acme\/web-app/i,
+    });
+    expect(branch).toHaveAttribute(
+      'href',
+      'https://github.com/acme/web-app/tree/feature/telemetry-export',
+    );
+  });
+
+  test('a job with no branch says so in plain text, with nothing to click', async () => {
+    vi.mocked(api.fetchQueue).mockResolvedValue({
+      ...mockQueue,
+      items: [{ ...queueItems[0], id: 909998, branch: null }],
+    });
+
+    renderApp();
+    await screen.findByRole('table', { name: /job queue/i });
+
+    const queue = screen.getByRole('table', { name: /job queue/i });
+    expect(within(queue).queryByRole('link', { name: /^Branch /i })).not.toBeInTheDocument();
+
+    const row = within(queue).getAllByRole('row')[1];
+    const branchCell = within(row).getAllByRole('cell')[2];
+    expect(branchCell).toHaveTextContent('unknown');
+    expect(within(branchCell).queryByRole('link')).not.toBeInTheDocument();
+    expect(branchCell.querySelector('a')).toBeNull();
   });
 
   test('history fits on one page when there is little of it', async () => {
