@@ -13,9 +13,9 @@ import {
 import { RunningJob } from '../types/api';
 import {
   formatCompactDuration,
+  formatDateThenTime,
   formatDuration,
   formatFullTimestamp,
-  formatShortDateTime,
   parseTimestamp,
 } from '../utils/format';
 import { MISSING_TEXT, orUnknown } from '../utils/labels';
@@ -227,7 +227,7 @@ const RunningSection: React.FC<RunningSectionProps> = ({
                       title={startedAt ? formatFullTimestamp(startedAt) : undefined}
                       sx={{ whiteSpace: 'nowrap' }}
                     >
-                      {startedAt ? formatShortDateTime(startedAt) : MISSING_TEXT}
+                      {startedAt ? formatDateThenTime(startedAt) : MISSING_TEXT}
                     </TableCell>
                   </TableRow>
                 );

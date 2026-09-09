@@ -312,6 +312,13 @@ describe('App dashboard', () => {
     expect(rowsOf(/job history/i)[1]).toMatch(/\d{2}\.\d{2} \| \d{2}:\d{2}/);
   });
 
+  test('a running job carries the date and then the clock time', async () => {
+    renderApp();
+    await screen.findByRole('table', { name: /running jobs/i });
+
+    expect(rowsOf(/running jobs/i)[1]).toMatch(/\d{2}\.\d{2} \| \d{2}:\d{2}/);
+  });
+
   test('the runner card is a header with the total and the three states stacked under it', async () => {
     renderApp();
     await screen.findByRole('table', { name: /job queue/i });
