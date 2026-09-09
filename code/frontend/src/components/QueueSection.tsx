@@ -21,7 +21,9 @@ import SectionHeader from './SectionHeader';
 import EmptyState from './EmptyState';
 import ErrorState from './ErrorState';
 import ExternalLink from './ExternalLink';
-import RepositoryPath, { repositoryPathText } from './RepositoryPath';
+import BranchLink from './BranchLink';
+import RepositoryLink from './RepositoryLink';
+import { repositoryShortName } from '../utils/repository';
 import SortableHeadCell from './SortableHeadCell';
 import TableSkeleton from './TableSkeleton';
 import TablePager, { usePage } from './TablePager';
@@ -43,22 +45,24 @@ interface QueueSectionProps {
   showScaleSetColumn: boolean;
 }
 
-type QueueColumn = 'waiting' | 'queuedFor' | 'repository' | 'job' | 'triggeredBy';
+type QueueColumn = 'job' | 'repository' | 'branch' | 'triggeredBy' | 'queuedFor' | 'waiting';
 
 export const UNKNOWN_QUEUED_FOR = 'Unknown';
 
 function queueSortValue(item: QueueItem, column: QueueColumn): SortValue {
   switch (column) {
-    case 'waiting':
-      return item.waitMs;
-    case 'queuedFor':
-      return item.scaleSet ?? UNKNOWN_QUEUED_FOR;
-    case 'repository':
-      return repositoryPathText(item.repository, item.branch);
     case 'job':
       return item.name;
+    case 'repository':
+      return repositoryShortName(item.repository);
+    case 'branch':
+      return item.branch || null;
     case 'triggeredBy':
       return item.actor?.login ?? null;
+    case 'queuedFor':
+      return item.scaleSet ?? UNKNOWN_QUEUED_FOR;
+    case 'waiting':
+      return item.waitMs;
   }
 }
 
@@ -170,6 +174,13 @@ const QueueSection: React.FC<QueueSectionProps> = ({
           <Table size="small" aria-label="Job queue">
             <TableHead>
               <TableRow>
+                <SortableHeadCell column="job" label="Job" sort={effectiveSort} onSort={toggle} />
+                <SortableHeadCell column="repository" label="Repository" sort={effectiveSort} onSort={toggle} />
+                <SortableHeadCell column="branch" label="Branch" sort={effectiveSort} onSort={toggle} />
+                <SortableHeadCell column="triggeredBy" label="Triggered by" sort={effectiveSort} onSort={toggle} />
+                {showScaleSetColumn && (
+                  <SortableHeadCell column="queuedFor" label="Queued for" sort={effectiveSort} onSort={toggle} />
+                )}
                 <SortableHeadCell
                   column="waiting"
                   label="Waiting"
@@ -177,12 +188,6 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                   onSort={toggle}
                   sx={{ width: 110 }}
                 />
-                {showScaleSetColumn && (
-                  <SortableHeadCell column="queuedFor" label="Queued for" sort={effectiveSort} onSort={toggle} />
-                )}
-                <SortableHeadCell column="repository" label="Repository / branch" sort={effectiveSort} onSort={toggle} />
-                <SortableHeadCell column="job" label="Job" sort={effectiveSort} onSort={toggle} />
-                <SortableHeadCell column="triggeredBy" label="Triggered by" sort={effectiveSort} onSort={toggle} />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -200,22 +205,7 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                         : undefined
                     }
                   >
-                    <TableCell
-                      title={createdAt ? `Queued at ${formatFullTimestamp(createdAt)}` : undefined}
-                      sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
-                    >
-                      {formatCompactDuration(liveWaitMs)}
-                    </TableCell>
-                    {showScaleSetColumn && (
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                        {item.scaleSet ?? UNKNOWN_QUEUED_FOR}
-                      </TableCell>
-                    )}
-                    <TableCell sx={{ maxWidth: 320, overflowWrap: 'anywhere' }}>
-                      <RepositoryPath repository={item.repository} branch={item.branch} />
-                    </TableCell>
                     <TableCell>
-
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                         <ExternalLink
                           href={item.htmlUrl}
@@ -241,6 +231,19 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                         )}
                       </Box>
                     </TableCell>
+                    <TableCell sx={{ maxWidth: 220, overflowWrap: 'anywhere' }}>
+                      <RepositoryLink
+                        repository={item.repository}
+                        repositoryUrl={item.repositoryUrl}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 220, overflowWrap: 'anywhere' }}>
+                      <BranchLink
+                        repository={item.repository}
+                        repositoryUrl={item.repositoryUrl}
+                        branch={item.branch}
+                      />
+                    </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       {orUnknown(item.actor?.login)}
                       {item.event && (
@@ -249,6 +252,17 @@ const QueueSection: React.FC<QueueSectionProps> = ({
                           {item.event}
                         </Box>
                       )}
+                    </TableCell>
+                    {showScaleSetColumn && (
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        {item.scaleSet ?? UNKNOWN_QUEUED_FOR}
+                      </TableCell>
+                    )}
+                    <TableCell
+                      title={createdAt ? `Queued at ${formatFullTimestamp(createdAt)}` : undefined}
+                      sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                    >
+                      {formatCompactDuration(liveWaitMs)}
                     </TableCell>
                   </TableRow>
                 );

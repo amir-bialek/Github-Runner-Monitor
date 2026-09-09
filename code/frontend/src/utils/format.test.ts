@@ -1,6 +1,7 @@
 import {
   formatAgo,
   formatCompactDuration,
+  formatDateThenTime,
   formatShortDateTime,
   formatFullTimestamp,
   formatTimeZoneLabel,
@@ -46,6 +47,16 @@ describe("the viewer's own clock", () => {
 
   test('short form is hh:mm dd.mm on the machine the page is open on', () => {
     expect(formatShortDateTime(moment)).toBe('14:32 05.08');
+  });
+
+  test('the finished form reads dd.mm | hh:mm, date first', () => {
+    expect(formatDateThenTime(moment)).toBe('05.08 | 14:32');
+    expect(formatDateThenTime(new Date('2026-09-09T15:22:41Z'))).toBe('09.09 | 18:22');
+    expect(formatDateThenTime(new Date('2026-01-02T00:05:00Z'))).toBe('02.01 | 02:05');
+  });
+
+  test('an unparseable finished time does not render as "Invalid Date"', () => {
+    expect(formatDateThenTime(new Date('nonsense'))).toBe('—');
   });
 
   test('the long form names the zone, so a time is never bare', () => {

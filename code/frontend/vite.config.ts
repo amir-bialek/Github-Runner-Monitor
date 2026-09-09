@@ -1,8 +1,11 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const entry = (file: string) => fileURLToPath(new URL(file, import.meta.url))
+
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     port: 3000,
@@ -21,6 +24,10 @@ export default defineConfig({
     outDir: 'build',
     sourcemap: true,
     rollupOptions: {
+      input: {
+        main: entry('./index.html'),
+        ...(mode === 'production' ? {} : { preview: entry('./preview.html') }),
+      },
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
@@ -38,4 +45,4 @@ export default defineConfig({
     // Replace process.env with import.meta.env for Vite
     'process.env': {},
   },
-})
+}))

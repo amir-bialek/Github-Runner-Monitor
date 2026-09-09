@@ -12,9 +12,9 @@ import {
 import { HistoryJob } from '../types/api';
 import {
   formatCompactDuration,
+  formatDateThenTime,
   formatDuration,
   formatFullTimestamp,
-  formatShortDateTime,
   parseTimestamp,
 } from '../utils/format';
 import { HISTORY_PAGE_SIZE } from '../appConfig';
@@ -24,7 +24,9 @@ import SectionHeader from './SectionHeader';
 import EmptyState from './EmptyState';
 import ErrorState from './ErrorState';
 import ExternalLink from './ExternalLink';
-import RepositoryPath, { repositoryPathText } from './RepositoryPath';
+import BranchLink from './BranchLink';
+import RepositoryLink from './RepositoryLink';
+import { repositoryShortName } from '../utils/repository';
 import SortableHeadCell from './SortableHeadCell';
 import StatusBadge, { resultLabel } from './StatusBadge';
 import TableSkeleton from './TableSkeleton';
@@ -46,22 +48,23 @@ interface HistorySectionProps {
 export const HISTORY_ROWS_PER_PAGE = HISTORY_PAGE_SIZE;
 
 type HistoryColumn =
-  | 'result'
-  | 'repository'
   | 'job'
+  | 'repository'
+  | 'branch'
   | 'triggeredBy'
   | 'scaleSet'
   | 'duration'
-  | 'finishedAt';
+  | 'finishedAt'
+  | 'result';
 
 function historySortValue(job: HistoryJob, column: HistoryColumn): SortValue {
   switch (column) {
-    case 'result':
-      return job.result;
-    case 'repository':
-      return repositoryPathText(job.repository, job.branch);
     case 'job':
       return job.name;
+    case 'repository':
+      return repositoryShortName(job.repository);
+    case 'branch':
+      return job.branch || null;
     case 'triggeredBy':
       return job.actor?.login ?? null;
     case 'scaleSet':
@@ -72,6 +75,8 @@ function historySortValue(job: HistoryJob, column: HistoryColumn): SortValue {
       const completedAt = parseTimestamp(job.completedAt);
       return completedAt ? completedAt.getTime() : null;
     }
+    case 'result':
+      return job.result;
   }
 }
 
@@ -143,14 +148,9 @@ const HistorySection: React.FC<HistorySectionProps> = ({
             <Table size="small" aria-label="Job history">
               <TableHead>
                 <TableRow>
-                  <SortableHeadCell column="result" label="Result" sort={effectiveSort} onSort={toggle} />
-                  <SortableHeadCell
-                    column="repository"
-                    label="Repository / branch"
-                    sort={effectiveSort}
-                    onSort={toggle}
-                  />
                   <SortableHeadCell column="job" label="Job" sort={effectiveSort} onSort={toggle} />
+                  <SortableHeadCell column="repository" label="Repository" sort={effectiveSort} onSort={toggle} />
+                  <SortableHeadCell column="branch" label="Branch" sort={effectiveSort} onSort={toggle} />
                   <SortableHeadCell column="triggeredBy" label="Triggered by" sort={effectiveSort} onSort={toggle} />
                   {showScaleSetColumn && (
                     <SortableHeadCell column="scaleSet" label="Scale set" sort={effectiveSort} onSort={toggle} />
@@ -163,6 +163,7 @@ const HistorySection: React.FC<HistorySectionProps> = ({
                     onSort={toggle}
                     sx={{ whiteSpace: 'nowrap' }}
                   />
+                  <SortableHeadCell column="result" label="Result" sort={effectiveSort} onSort={toggle} />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -171,18 +172,22 @@ const HistorySection: React.FC<HistorySectionProps> = ({
                   return (
                     <TableRow key={job.id} hover>
                       <TableCell>
-                        <StatusBadge result={job.result} />
-                      </TableCell>
-                      <TableCell sx={{ maxWidth: 300, overflowWrap: 'anywhere' }}>
-                        <RepositoryPath repository={job.repository} branch={job.branch} />
-                      </TableCell>
-                      <TableCell>
                         <ExternalLink
                           href={job.htmlUrl}
                           label={`Job ${job.name} in ${job.repository}, ${resultLabel(job.result)}`}
                         >
                           {job.name}
                         </ExternalLink>
+                      </TableCell>
+                      <TableCell sx={{ maxWidth: 200, overflowWrap: 'anywhere' }}>
+                        <RepositoryLink repository={job.repository} repositoryUrl={job.repositoryUrl} />
+                      </TableCell>
+                      <TableCell sx={{ maxWidth: 200, overflowWrap: 'anywhere' }}>
+                        <BranchLink
+                          repository={job.repository}
+                          repositoryUrl={job.repositoryUrl}
+                          branch={job.branch}
+                        />
                       </TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{orUnknown(job.actor?.login)}</TableCell>
                       {showScaleSetColumn && <TableCell>{orUnknown(job.scaleSet)}</TableCell>}
@@ -194,9 +199,12 @@ const HistorySection: React.FC<HistorySectionProps> = ({
                       </TableCell>
                       <TableCell
                         title={completedAt ? formatFullTimestamp(completedAt) : undefined}
-                        sx={{ whiteSpace: 'nowrap' }}
+                        sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
                       >
-                        {completedAt ? formatShortDateTime(completedAt) : MISSING_TEXT}
+                        {completedAt ? formatDateThenTime(completedAt) : MISSING_TEXT}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge result={job.result} />
                       </TableCell>
                     </TableRow>
                   );

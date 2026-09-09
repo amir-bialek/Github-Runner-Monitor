@@ -24,7 +24,9 @@ import SectionHeader from './SectionHeader';
 import EmptyState from './EmptyState';
 import ErrorState from './ErrorState';
 import ExternalLink from './ExternalLink';
-import RepositoryPath, { repositoryPathText } from './RepositoryPath';
+import BranchLink from './BranchLink';
+import RepositoryLink from './RepositoryLink';
+import { repositoryShortName } from '../utils/repository';
 import SortableHeadCell from './SortableHeadCell';
 import TableSkeleton from './TableSkeleton';
 import TablePager, { usePage } from './TablePager';
@@ -45,14 +47,23 @@ interface RunningSectionProps {
   showScaleSetColumn: boolean;
 }
 
-type RunningColumn = 'repository' | 'job' | 'triggeredBy' | 'scaleSet' | 'startedAt' | 'runningFor';
+type RunningColumn =
+  | 'job'
+  | 'repository'
+  | 'branch'
+  | 'triggeredBy'
+  | 'scaleSet'
+  | 'runningFor'
+  | 'startedAt';
 
 function runningSortValue(job: RunningJob, column: RunningColumn): SortValue {
   switch (column) {
-    case 'repository':
-      return repositoryPathText(job.repository, job.branch);
     case 'job':
       return job.name;
+    case 'repository':
+      return repositoryShortName(job.repository);
+    case 'branch':
+      return job.branch || null;
     case 'triggeredBy':
       return job.actor?.login ?? null;
     case 'scaleSet':
@@ -149,22 +160,23 @@ const RunningSection: React.FC<RunningSectionProps> = ({
           <Table size="small" aria-label="Running jobs">
             <TableHead>
               <TableRow>
-                <SortableHeadCell column="repository" label="Repository / branch" sort={effectiveSort} onSort={toggle} />
                 <SortableHeadCell column="job" label="Job" sort={effectiveSort} onSort={toggle} />
+                <SortableHeadCell column="repository" label="Repository" sort={effectiveSort} onSort={toggle} />
+                <SortableHeadCell column="branch" label="Branch" sort={effectiveSort} onSort={toggle} />
                 <SortableHeadCell column="triggeredBy" label="Triggered by" sort={effectiveSort} onSort={toggle} />
                 {showScaleSetColumn && (
                   <SortableHeadCell column="scaleSet" label="Scale set" sort={effectiveSort} onSort={toggle} />
                 )}
                 <SortableHeadCell
-                  column="startedAt"
-                  label="Started at"
+                  column="runningFor"
+                  label="Running for"
                   sort={effectiveSort}
                   onSort={toggle}
                   sx={{ whiteSpace: 'nowrap' }}
                 />
                 <SortableHeadCell
-                  column="runningFor"
-                  label="Running for"
+                  column="startedAt"
+                  label="Started at"
                   sort={effectiveSort}
                   onSort={toggle}
                   sx={{ whiteSpace: 'nowrap' }}
@@ -177,9 +189,6 @@ const RunningSection: React.FC<RunningSectionProps> = ({
                 const liveRunningMs = startedAt ? now - startedAt.getTime() : job.runningMs;
                 return (
                   <TableRow key={job.id} hover>
-                    <TableCell sx={{ maxWidth: 320, overflowWrap: 'anywhere' }}>
-                      <RepositoryPath repository={job.repository} branch={job.branch} />
-                    </TableCell>
                     <TableCell>
                       <ExternalLink
                         href={job.htmlUrl}
@@ -187,6 +196,16 @@ const RunningSection: React.FC<RunningSectionProps> = ({
                       >
                         {job.name}
                       </ExternalLink>
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 220, overflowWrap: 'anywhere' }}>
+                      <RepositoryLink repository={job.repository} repositoryUrl={job.repositoryUrl} />
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 220, overflowWrap: 'anywhere' }}>
+                      <BranchLink
+                        repository={job.repository}
+                        repositoryUrl={job.repositoryUrl}
+                        branch={job.branch}
+                      />
                     </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>
                       {orUnknown(job.actor?.login)}
@@ -199,16 +218,16 @@ const RunningSection: React.FC<RunningSectionProps> = ({
                     </TableCell>
                     {showScaleSetColumn && <TableCell>{orUnknown(job.scaleSet)}</TableCell>}
                     <TableCell
-                      title={startedAt ? formatFullTimestamp(startedAt) : undefined}
-                      sx={{ whiteSpace: 'nowrap' }}
-                    >
-                      {startedAt ? formatShortDateTime(startedAt) : MISSING_TEXT}
-                    </TableCell>
-                    <TableCell
                       title={liveRunningMs === null ? undefined : `Running for ${formatDuration(liveRunningMs)}`}
                       sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
                     >
                       {liveRunningMs === null ? MISSING_TEXT : formatCompactDuration(liveRunningMs)}
+                    </TableCell>
+                    <TableCell
+                      title={startedAt ? formatFullTimestamp(startedAt) : undefined}
+                      sx={{ whiteSpace: 'nowrap' }}
+                    >
+                      {startedAt ? formatShortDateTime(startedAt) : MISSING_TEXT}
                     </TableCell>
                   </TableRow>
                 );
