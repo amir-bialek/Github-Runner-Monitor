@@ -1,0 +1,23 @@
+// Covers the two build-tool config files so an editor knows what they are.
+// Deliberately NOT a composite project and NOT referenced from tsconfig.json:
+// as a reference it made `tsc --noEmit` fail on TS6305 without checking any
+// source, and as a composite project it wanted to emit .d.ts files into the
+// source tree during what should be a read-only check.
+//
+// It is not part of `npm run typecheck`. `vitest.config.ts` currently does not
+// type-check on its own, because vitest 2 brings a second copy of vite's types
+// along with the root vite 6 and `react()` resolves to the wrong plugin type.
+// That clears on vitest 4, which is a breaking major and a deliberate upgrade,
+// not something to slip into a fix round.
+{
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "noEmit": true,
+    "strict": true,
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts", "vitest.config.ts"]
+}

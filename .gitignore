@@ -1,0 +1,53 @@
+# Your own settings file. It can hold a real GitHub token, so it must never
+# be committed. Copy .env.example to .env and fill it in locally.
+# .env.example itself stays in git — it is the placeholder copy everyone gets.
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Installed packages — restored with `npm ci`, never committed.
+node_modules/
+.npm/
+.pnp
+.pnp.js
+
+# Build output
+build/
+dist/
+*.tsbuildinfo
+code/frontend/build/
+code/frontend/dist/
+code/backend/dist/
+
+# Test and lint output
+coverage/
+*.lcov
+.eslintcache
+.vite/
+.vitest/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pids/
+*.pid
+*.pid.lock
+*.seed
+
+# Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Operating system junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+private

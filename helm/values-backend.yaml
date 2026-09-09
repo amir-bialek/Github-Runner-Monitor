@@ -1,0 +1,82 @@
+# Install with:
+#   helm install runner-monitor-backend ./chart -f values-backend.yaml
+#
+# The Service name below (backend) is load-bearing, not cosmetic: the
+# frontend's nginx.conf has "proxy_pass http://backend:3001/" baked in at
+# image build time. Renaming this Service breaks /api on the frontend.
+deployment:
+  name: backend
+  labels:
+    app: github-runner-monitor-backend
+  image:
+    # Replace with the published image, e.g. <dockerhub-account>/github-runner-monitor-backend
+    name: ""
+    tag: latest
+  resources:
+    limits:
+      cpu: 400m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  readiness:
+    includeReadinessProbe: true
+    probePath: /health
+    probePort: 3001
+    scheme: HTTP
+    initialDelay: 5
+    period: 10
+    failureThreshold: 3
+    successThreshold: 1
+    timeout: 3
+  liveness:
+    includeLivenessProbe: true
+    probePath: /health
+    probePort: 3001
+    scheme: HTTP
+    initialDelay: 10
+    period: 30
+    failureThreshold: 3
+    successThreshold: 1
+    timeout: 3
+  env:
+    regular:
+      NODE_ENV: production
+      PORT: "3001"
+      USE_MOCK_DATA: "false"
+      # Required when USE_MOCK_DATA is "false".
+      GITHUB_ORGANIZATION: ""
+      # Runner pool counts are the only thing still fetched from GitHub.
+      # Job data arrives by webhook and is already in memory.
+      CACHE_TTL_RUNNERS_SECONDS: "30"
+      CACHE_MAX_SIZE: "100"
+      # Where the job list is saved so a restart does not empty the page.
+      # Leave empty and nothing is saved or read back.
+      JOB_STATE_S3_BUCKET: ""
+      JOB_STATE_S3_KEY: "github-runner-monitor/job-store.json"
+    # Neither of these goes in this file. Create the secret yourself first:
+    #   kubectl create secret generic github-runner-monitor-token \
+    #     --from-literal=token=<your-fine-grained-token> \
+    #     --from-literal=webhookSecret=<the-organisation-webhook-secret>
+    # See ../README.md for what the token needs and how to create the webhook.
+    fromSecrets:
+    - envName: GITHUB_TOKEN
+      secretName: github-runner-monitor-token
+      secretKey: token
+    # What proves an incoming message really came from GitHub. Without it the
+    # webhook route refuses every delivery.
+    - envName: GITHUB_WEBHOOK_SECRET
+      secretName: github-runner-monitor-token
+      secretKey: webhookSecret
+
+service:
+  services:
+  - name: backend
+    type: ClusterIP
+    enableProbePort: false
+    selectDeployment: true
+    ports:
+    - name: http
+      protocol: TCP
+      port: 3001
+      targetPort: 3001

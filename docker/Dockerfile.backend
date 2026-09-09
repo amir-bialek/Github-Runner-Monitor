@@ -1,0 +1,35 @@
+FROM node:24-alpine AS build
+
+WORKDIR /app
+
+COPY code/backend/package*.json ./
+
+RUN npm ci
+
+COPY code/backend/src ./src
+COPY code/backend/tests ./tests
+COPY code/backend/tsconfig.json ./
+COPY code/backend/jest.config.js ./
+
+FROM node:24-alpine AS production
+
+WORKDIR /app
+
+COPY code/backend/package*.json ./
+
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY code/backend/src ./src
+
+RUN addgroup -g 1001 -S nodejs \
+  && adduser -S nodejs -u 1001 \
+  && chown -R nodejs:nodejs /app
+
+USER nodejs
+
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
+
+CMD ["npm", "start"]

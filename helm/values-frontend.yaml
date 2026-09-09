@@ -1,0 +1,78 @@
+# Install with:
+#   helm install runner-monitor-frontend ./chart -f values-frontend.yaml
+#
+# /api is baked into the frontend image at build time (VITE_API_URL), and nginx
+# forwards it to the "backend" Service by name — see values-backend.yaml.
+# APP_HEADING and APP_TAB_TITLE are read at container start, so changing them
+# only needs a restart, not a new image.
+deployment:
+  name: frontend
+  labels:
+    app: github-runner-monitor-frontend
+  image:
+    # Replace with the published image, e.g. <dockerhub-account>/github-runner-monitor-frontend
+    name: ""
+    tag: latest
+  env:
+    regular:
+      APP_HEADING: "GitHub Runner Monitor"
+      APP_TAB_TITLE: "Runner Monitor"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 25m
+      memory: 32Mi
+  readiness:
+    includeReadinessProbe: true
+    probePath: /
+    probePort: 80
+    scheme: HTTP
+    initialDelay: 5
+    period: 10
+    failureThreshold: 3
+    successThreshold: 1
+    timeout: 3
+  liveness:
+    includeLivenessProbe: true
+    probePath: /
+    probePort: 80
+    scheme: HTTP
+    initialDelay: 10
+    period: 30
+    failureThreshold: 3
+    successThreshold: 1
+    timeout: 3
+
+service:
+  services:
+  - name: frontend
+    type: ClusterIP
+    enableProbePort: false
+    selectDeployment: true
+    ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+
+# Off by default — turn on and fill in your own host once you have one.
+ingress:
+  enabled: false
+  ingresses:
+  - name: github-runner-monitor
+    ingressClassName: ""
+    annotations: {}
+    labels: {}
+    hosts:
+    - host: runner-monitor.example.com
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
+    tls: []

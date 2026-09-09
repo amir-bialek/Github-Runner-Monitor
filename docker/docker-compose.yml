@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: github-runner-monitor-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_ORGANIZATION=${GITHUB_ORGANIZATION:-}
+      - USE_MOCK_DATA=${USE_MOCK_DATA:-true}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - JOB_STATE_S3_BUCKET=${JOB_STATE_S3_BUCKET:-}
+      - JOB_STATE_S3_KEY=${JOB_STATE_S3_KEY:-}
+      - CACHE_TTL_RUNNERS_SECONDS=30
+      - CACHE_MAX_SIZE=100
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: /api
+    container_name: github-runner-monitor-frontend
+    environment:
+      - APP_HEADING=${APP_HEADING:-GitHub Runner Monitor}
+      - APP_TAB_TITLE=${APP_TAB_TITLE:-Runner Monitor}
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

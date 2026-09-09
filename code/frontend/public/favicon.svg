@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="Runner Monitor">
+  <title>Runner Monitor</title>
+  <!-- A queue seen edge-on: three waiting jobs, longest wait at the top.
+       Colours are the app's own (frontend/src/theme.ts): the tile is
+       palette.primary.main #0b5cab, the bars are white stepped down in
+       lightness so the order reads without relying on hue. -->
+  <rect width="32" height="32" rx="6" fill="#0b5cab"/>
+  <rect x="6" y="3.5"  width="20" height="6" rx="2" fill="#fff"/>
+  <rect x="6" y="13"   width="13" height="6" rx="2" fill="#fff" opacity=".72"/>
+  <rect x="6" y="22.5" width="8"  height="6" rx="2" fill="#fff" opacity=".5"/>
+</svg>

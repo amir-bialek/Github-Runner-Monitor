@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 1.0.0
+description: Generic single-deployment Helm chart. Install once per component (backend, frontend), each with its own values file.
+name: app
+type: application
+version: 1.0.0

@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    // ES2022.Error is for the `{ cause }` option in services/apiError.ts —
+    // supported everywhere this app runs, and the only ES2022 feature used.
+    "lib": ["ES2020", "ES2022.Error", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Vite specific */
+    "allowJs": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* Types */
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+  },
+  // Source only. `vite.config.ts` and `vitest.config.ts` used to be listed here
+  // *and* claimed by tsconfig.node.json as a composite project that nothing
+  // ever built, so `tsc --noEmit -p tsconfig.json` died on two TS6305 config
+  // errors before it looked at a single file in src/ — reporting failure while
+  // checking nothing, and hiding eight real errors. `npm run typecheck` now
+  // checks the source, which is the thing that ships.
+  "include": ["src"]
+}

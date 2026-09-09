@@ -1,0 +1,96 @@
+# Base defaults for the chart. Nothing here names this app — the
+# per-component files (../values-backend.yaml, ../values-frontend.yaml) layer
+# on top and fill in the image, env, ports and probes for each one.
+deployment:
+  enabled: true
+  command: []
+  args: []
+  name: app
+  labels:
+    app: app
+  image:
+    name: ""
+    tag: latest
+    pullPolicy: "IfNotPresent"
+  replicasCount: 1
+  autoscaling:
+    enabled: false
+  volumes:
+    fromSecrets: []
+    fromConfigMaps: []
+    fromPvc: []
+    fromNFS: []
+    emptyDir: []
+  env:
+    fromSecrets: []
+    regular: {}
+    fromConfigMaps: []
+  podAnnotations: {}
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 25m
+      memory: 64Mi
+  podSecurityContext: {}
+  containerSecurityContext: {}
+  readiness:
+    openContainerPort: false
+    openServicePort: false
+    includeReadinessProbe: false
+  liveness:
+    includeLivenessProbe: false
+  nodeSelector: {}
+  tolerations: []
+  affinity:
+    podSelfAntiAffinity:
+      enabled: false
+    nodeAffinity:
+      enabled: false
+  revisionHistoryLimit: 3
+
+service:
+  enabled: true
+  services:
+  - name: app
+    annotations: {}
+    labels: {}
+    enableProbePort: false
+    type: ClusterIP
+    ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+    selectDeployment: true
+    selector: {}
+
+ingress:
+  enabled: false
+  ingresses: []
+
+networkpolicy:
+  enabled: false
+
+serviceAccount:
+  enabled: false
+
+configMaps:
+  enabled: false
+
+# Off on purpose: this chart's secrets.yaml takes an already-base64-encoded
+# value in the values file, which is exactly the "token committed to a file"
+# this project refuses to do. The GITHUB_TOKEN secret is created out of band
+# (see ../README.md) and referenced by name in values-backend.yaml instead.
+secrets:
+  enabled: false
+
+storageClass:
+  enabled: false
+
+pvc:
+  enabled: false
+
+job:
+  enabled: false

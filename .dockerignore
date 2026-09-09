@@ -1,0 +1,13 @@
+.agent-work/
+docs/
+helm/
+HANDOFF.md
+README.md
+**/node_modules/
+**/dist/
+**/build/
+**/coverage/
+.git/
+.env
+.env.*
+*.log

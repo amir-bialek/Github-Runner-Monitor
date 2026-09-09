@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b5cab" />
+    <meta
+      name="description"
+      content="GitHub Runner Monitoring Dashboard - Monitor GitHub Actions runners, jobs, and workflows in real-time"
+    />
+    <link rel="manifest" href="/manifest.json" />
+    <!-- Matches the <h1>. Replaced at runtime with "N waiting · Runner
+         Monitor" so a pinned background tab answers half the question. -->
+    <title>Runner Monitor</title>
+    <!-- Written at container start from APP_HEADING and APP_TAB_TITLE. Loaded
+         before the bundle so the heading and the tab are right on first paint. -->
+    <script src="/config.js"></script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

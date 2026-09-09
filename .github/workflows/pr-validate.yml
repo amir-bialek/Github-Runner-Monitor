@@ -1,0 +1,93 @@
+name: PR Validate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            backend:
+              - 'code/backend/**'
+              - 'docker/Dockerfile.backend'
+            frontend:
+              - 'code/frontend/**'
+              - 'docker/Dockerfile.frontend'
+              - 'docker/nginx.conf'
+
+  build-backend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Build backend image
+        run: docker build -f docker/Dockerfile.backend -t backend:pr-check .
+
+      - name: Run backend container
+        run: docker run -d --name backend-pr-check -e USE_MOCK_DATA=true -p 3001:3001 backend:pr-check
+      - name: Health check
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:3001/health; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker logs backend-pr-check
+          exit 1
+     
+      - name: Stop and remove container
+        if: always()
+        run: docker rm -f backend-pr-check
+
+  build-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+    
+      - name: Build frontend image
+        run: docker build -f docker/Dockerfile.frontend --build-arg VITE_API_URL=/api -t frontend:pr-check .
+   
+      - name: Run frontend container
+        run: docker run -d --name frontend-pr-check --add-host=backend:127.0.0.1 -p 8080:80 frontend:pr-check
+     
+      - name: Health check
+        run: |
+          for i in $(seq 1 10); do
+            if curl -sf http://localhost:8080/; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker logs frontend-pr-check
+          exit 1
+          
+      - name: Stop and remove container
+        if: always()
+        run: docker rm -f frontend-pr-check

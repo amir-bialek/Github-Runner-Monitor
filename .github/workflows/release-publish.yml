@@ -1,0 +1,97 @@
+name: Release Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: 'Build backend'
+        type: boolean
+        default: true
+      frontend:
+        description: 'Build frontend'
+        type: boolean
+        default: false
+
+env:
+  REPO: bialekamir/github-runner-monitor
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      types: ${{ steps.pick.outputs.types }}
+    steps:
+      - name: Pick image types
+        id: pick
+        run: |
+          TYPES=()
+          if [ "${{ inputs.backend }}" = "true" ]; then TYPES+=('"backend"'); fi
+          if [ "${{ inputs.frontend }}" = "true" ]; then TYPES+=('"frontend"'); fi
+          if [ ${#TYPES[@]} -eq 0 ]; then
+            echo "Select at least one of backend / frontend."
+            exit 1
+          fi
+          JSON="[$(IFS=,; echo "${TYPES[*]}")]"
+          echo "types=$JSON" >> "$GITHUB_OUTPUT"
+          echo "Building: $JSON"
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        type: ${{ fromJSON(needs.prepare.outputs.types) }}
+    env:
+      TYPE: ${{ matrix.type }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        run: |
+          LATEST_TAG=$(git tag -l "${TYPE}-v[0-9]*.[0-9]*.[0-9]*" | sort -V | tail -n 1)
+          echo "Latest tag found: $LATEST_TAG"
+          if [ -z "$LATEST_TAG" ]; then
+              NEW_TAG="${TYPE}-v1.0.0"
+          else
+              NEW_TAG=$(echo "$LATEST_TAG" | awk -F. 'BEGIN{OFS="."}{$NF+=1;print}')
+          fi
+          echo "NEW_TAG=$NEW_TAG" >> "$GITHUB_ENV"
+          echo "Generated new tag: $NEW_TAG"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push dockerfile
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.${{ env.TYPE }}
+          build-args: ${{ env.TYPE == 'frontend' && 'VITE_API_URL=/api' || '' }}
+          push: true
+          tags: ${{ env.REPO }}:${{ env.NEW_TAG }},${{ env.REPO }}:${{ env.TYPE }}-latest
+
+      - name: Configure Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Auto Tag"
+
+      - name: Push Tag
+        run: |
+          git tag ${{ env.NEW_TAG }}
+          git push origin ${{ env.NEW_TAG }}

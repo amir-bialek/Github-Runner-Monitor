@@ -1,0 +1,16 @@
+{
+  "short_name": "Runner Monitor",
+  "name": "GitHub Runner Monitor",
+  "description": "Dashboard showing which GitHub Actions jobs are waiting and which self-hosted runner pools have nothing free",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0b5cab",
+  "background_color": "#ffffff"
+}
