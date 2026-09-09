@@ -1,8 +1,6 @@
 # GitHub Runner Monitor
 
-A dashboard that answers one question for a developer whose build is waiting: **why is my job stuck, and what is ahead of it?**
-
-It shows the queue of waiting jobs in the order they will run, and how many self-hosted runners are free in each pool — which is usually the reason the queue exists. Anything more detailed is a link out to github.com.
+A live dashboard for self-hosted GitHub Actions runners. It shows how many runners are free, busy or offline in each pool, which jobs are waiting and in what order, what is running now, and what finished recently. Every job links out to GitHub for the full detail.
 
 <details open>
 <summary>Table of Contents</summary>
