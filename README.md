@@ -55,7 +55,7 @@ To run it on Kubernetes instead, see [helm/README.md](helm/README.md).
 
 A job that ran on one of GitHub's own cloud runners, rather than a self-hosted one, shows its pool as "GitHub Actions (cloud)".
 
-Every job shows its repository and branch as one path, who started it, and what triggered it, so you can find your own row among jobs that otherwise look identical. The organisation name is left off the path — every repository on the page belongs to the same one. The job name links out to the job on github.com.
+Every job shows its repository and its branch in their own columns, who started it, and what triggered it, so you can find your own row among jobs that otherwise look identical. The organisation name is left off the repository — every repository on the page belongs to the same one. The job name, the repository and the branch each link out to github.com in a new tab. A job whose branch GitHub did not report says "unknown" instead, with nothing to click.
 
 Click any column heading to sort the table by that column, and click it again to reverse it. Sorting only reorders rows — nothing is hidden.
 
