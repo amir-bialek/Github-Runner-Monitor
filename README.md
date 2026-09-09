@@ -16,7 +16,7 @@ It shows the queue of waiting jobs in the order they will run, and how many self
 
 </details>
 
-![The dashboard in the dark theme, with the runner pools, the job queue, the running jobs and the recent history.](docs/images/dashboard-dark.png)
+![The dashboard in the light theme, with the runner pools, the job queue, the running jobs and the recent history.](docs/images/dashboard-light.png)
 
 The top of the page, with the scale set picker and the theme switch:
 
