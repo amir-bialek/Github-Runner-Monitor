@@ -21,7 +21,7 @@ interface AlertLine {
 }
 
 const WarningIcon: React.FC = () => (
-  <SvgIcon viewBox="0 0 24 24" sx={{ fontSize: 22 }} aria-hidden>
+  <SvgIcon viewBox="0 0 24 24" color="error" sx={{ fontSize: 22 }} aria-hidden>
     <path
       d="M12 3.5 2.5 20h19L12 3.5z"
       fill="none"
@@ -29,7 +29,7 @@ const WarningIcon: React.FC = () => (
       strokeWidth={2.6}
       strokeLinejoin="round"
     />
-    <path d="M10.8 9h2.4l-.4 6h-1.6l-.4-6zm1.2 7.3a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z" fill="#d32f2f" />
+    <path d="M10.8 9h2.4l-.4 6h-1.6l-.4-6zm1.2 7.3a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z" fill="currentColor" />
   </SvgIcon>
 );
 
