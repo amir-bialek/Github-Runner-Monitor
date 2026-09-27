@@ -73,13 +73,13 @@ Two alerts watch for trouble so you do not have to keep reading the tables:
 - **Jobs stuck in the queue** — a job has been waiting for a runner longer than the queue wait threshold (15 minutes unless you change it). There is one alert per pool, listing its stuck jobs longest first, each linking to GitHub. Jobs with no known pool get their own "unknown pool" alert.
 - **Runner group offline** — a pool has had no online runner for longer than the offline threshold (10 minutes unless you change it). A pool that vanishes from GitHub's runner list altogether counts too, for up to 7 days after it was last seen. If GitHub cannot be reached, offline alerts are left as they were instead of being raised or cleared on missing data.
 
-Active alerts sit at the top of the page, offline pools first. The **Alerts** button in the header shows how many are active, and so does the browser tab title. The backend checks every 30 seconds whether or not anyone has the page open.
+The **Alerts** button in the header shows how many alerts are active, and so does the browser tab title. Click it for the list: one line per stuck job and one per offline group, offline groups first, 10 lines per page. The backend checks every 30 seconds whether or not anyone has the page open.
 
-![An offline runner group alert and a stuck queue alert at the top of the dashboard.](docs/images/alerts-banner.png)
+![The Alerts window open under the header button, listing an offline runner group and three waiting jobs.](docs/images/alerts-popover.png)
 
 ### Changing the thresholds
 
-The starting values come from the deployment — the `ALERT_*` variables below, set in Helm values or `.env`. After that, anyone with the page open can change them from **Alerts** in the header: turn each alert on or off, change its threshold in minutes, and set or remove a webhook.
+The starting values come from the deployment — the `ALERT_*` variables below, set in Helm values or `.env`. After that, anyone with the page open can change them from **Alerts → Alert settings** in the header: turn each alert on or off, change its threshold in minutes, and set or remove a webhook.
 
 ![The Alert settings dialog.](docs/images/alert-settings.png)
 

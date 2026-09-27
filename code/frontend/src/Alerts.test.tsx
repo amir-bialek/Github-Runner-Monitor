@@ -31,8 +31,8 @@ const queueAlert: MonitorAlert = {
   since: minutesAgo(20),
   firedAt: minutesAgo(5),
   message: '4 jobs have waited longer than 15 minutes for arc-gpu-a10',
-  jobCount: 4,
-  jobs: [20, 18, 17, 16].map((waited, index) => ({
+  jobCount: 5,
+  jobs: [20, 18, 17, 16, 15].map((waited, index) => ({
     id: 900100 + index,
     name: `build-${index}`,
     repository: 'acme/web-app',
@@ -81,9 +81,16 @@ function renderApp() {
   );
 }
 
-async function openSettings() {
+async function openAlerts() {
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: /^alert settings/i }));
+  await user.click(await screen.findByRole('button', { name: /^alerts/i }));
+  const heading = await screen.findByRole('heading', { name: 'Alerts:' });
+  return { user, section: heading.closest('section')! };
+}
+
+async function openSettings() {
+  const { user } = await openAlerts();
+  await user.click(screen.getByRole('button', { name: 'Alert settings' }));
   const dialog = await screen.findByRole('dialog', { name: /alert settings/i });
   await within(dialog).findByLabelText(/queue wait threshold/i);
   return { user, dialog };
@@ -103,59 +110,73 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('on-screen alerts', () => {
-  test('nothing is shown when there are no alerts', async () => {
-    renderApp();
-    await waitFor(() => expect(api.fetchAlerts).toHaveBeenCalled());
-    expect(screen.queryByRole('region', { name: /active alerts/i })).not.toBeInTheDocument();
-    expect(document.title).not.toContain('alert');
-  });
-
-  test('each active alert is shown at the top of the page, offline first', async () => {
+describe('alerts window', () => {
+  test('nothing about alerts is on the page itself', async () => {
     vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: minutesAgo(0), alerts: [offlineAlert, queueAlert] });
     renderApp();
-
-    const region = await screen.findByRole('region', { name: /active alerts/i });
-    const alerts = within(region).getAllByRole('alert');
-    expect(alerts).toHaveLength(2);
-    expect(alerts[0]).toHaveTextContent('Runner group offline');
-    expect(alerts[0]).toHaveTextContent('arc-windows-x64 has 0 of 2 runners online');
-    expect(alerts[0]).toHaveTextContent(/no runners online for 12 ?m/i);
-    expect(alerts[1]).toHaveTextContent('Jobs stuck in the queue');
-    expect(alerts[1]).toHaveTextContent('4 jobs have waited longer than 15 minutes for arc-gpu-a10');
-    expect(alerts[1]).toHaveTextContent(/oldest job waiting 20 ?m/i);
+    await screen.findByRole('button', { name: 'Alerts — 2 active' });
+    expect(screen.queryByRole('heading', { name: 'Alerts:' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/is waiting for/)).not.toBeInTheDocument();
   });
 
-  test('a queue alert lists the stuck jobs, linking to GitHub, three at a time', async () => {
-    vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: minutesAgo(0), alerts: [queueAlert] });
+  test('the header button carries the count and the tab title too', async () => {
+    vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: minutesAgo(0), alerts: [offlineAlert, queueAlert] });
     renderApp();
-    const user = userEvent.setup();
+    await screen.findByRole('button', { name: 'Alerts — 2 active' });
+    expect(document.title).toMatch(/^⚠ 2 alerts · /);
+  });
 
-    const alert = await screen.findByRole('alert');
-    expect(within(alert).getAllByRole('listitem').filter((item) => item.textContent?.includes('waiting'))).toHaveLength(3);
-    expect(within(alert).getByRole('link', { name: /build-0/ })).toHaveAttribute(
+  test('clicking it lists one plain line per stuck job and per offline group, offline first', async () => {
+    vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: minutesAgo(0), alerts: [offlineAlert, queueAlert] });
+    renderApp();
+    await screen.findByRole('button', { name: 'Alerts — 2 active' });
+    const { section } = await openAlerts();
+
+    const lines = within(section).getAllByRole('listitem').map((item) => item.textContent);
+    expect(lines).toHaveLength(6);
+    expect(lines[0]).toMatch(/^Runner group arc-windows-x64 has had no online runners \(0 of 2\) for 12 ?m/);
+    expect(lines[1]).toMatch(/^Job build-0 is waiting for 20 ?m/);
+    expect(within(section).getByRole('link', { name: /build-0/ })).toHaveAttribute(
       'href',
       'https://github.com/acme/web-app/actions/runs/1/job/900100',
     );
-
-    await user.click(within(alert).getByRole('button', { name: 'Show 1 more' }));
-    expect(within(alert).getByRole('link', { name: /build-3/ })).toBeInTheDocument();
   });
 
-  test('the tab title and the header badge carry the alert count', async () => {
-    vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: minutesAgo(0), alerts: [offlineAlert, queueAlert] });
+  test('shows at most ten lines per page', async () => {
+    const many: MonitorAlert = {
+      ...queueAlert,
+      jobCount: 12,
+      jobs: Array.from({ length: 12 }, (_, index) => ({
+        id: 900200 + index,
+        name: `job-${index}`,
+        repository: 'acme/web-app',
+        htmlUrl: `https://github.com/acme/web-app/actions/runs/1/job/${900200 + index}`,
+        createdAt: minutesAgo(30 - index),
+        waitMs: (30 - index) * 60 * 1000,
+      })),
+    };
+    vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: minutesAgo(0), alerts: [many] });
     renderApp();
+    await screen.findByRole('button', { name: 'Alerts — 1 active' });
+    const { user, section } = await openAlerts();
 
-    await screen.findByRole('region', { name: /active alerts/i });
-    expect(document.title).toMatch(/^⚠ 2 alerts · /);
-    expect(screen.getByRole('button', { name: 'Alert settings — 2 active' })).toBeInTheDocument();
+    expect(within(section).getAllByRole('listitem')).toHaveLength(10);
+    await user.click(within(section).getByRole('button', { name: /next page/i }));
+    expect(within(section).getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  test('with nothing wrong it says so', async () => {
+    renderApp();
+    await waitFor(() => expect(api.fetchAlerts).toHaveBeenCalled());
+    const { section } = await openAlerts();
+    expect(section).toHaveTextContent('No active alerts.');
+    expect(document.title).not.toContain('alert');
   });
 
   test('a failing alerts endpoint does not take the dashboard down', async () => {
     vi.mocked(api.fetchAlerts).mockRejectedValue(toApiError({ message: 'Network Error' }));
     renderApp();
     expect(await screen.findByRole('heading', { name: /available runners/i })).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: /active alerts/i })).not.toBeInTheDocument();
   });
 });
 

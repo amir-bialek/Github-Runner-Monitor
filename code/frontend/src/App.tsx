@@ -17,7 +17,7 @@ import AvailabilityPanel from './components/AvailabilityPanel';
 import QueueSection from './components/QueueSection';
 import RunningSection from './components/RunningSection';
 import HistorySection from './components/HistorySection';
-import AlertBanner from './components/AlertBanner';
+import AlertsPopover from './components/AlertsPopover';
 import AlertSettingsDialog from './components/AlertSettingsDialog';
 import { APP_HEADING, APP_TAB_TITLE } from './appConfig';
 import ErrorState from './components/ErrorState';
@@ -49,6 +49,7 @@ function App() {
   const settingsQuery = useSettings();
   const alertsQuery = useAlerts();
   const [alertSettingsOpen, setAlertSettingsOpen] = useState(false);
+  const [alertsAnchor, setAlertsAnchor] = useState<HTMLElement | null>(null);
   const activeAlerts = useMemo(() => alertsQuery.data?.alerts ?? [], [alertsQuery.data]);
 
   const allScaleSets = useMemo(() => scaleSetsQuery.data ?? [], [scaleSetsQuery.data]);
@@ -162,11 +163,12 @@ function App() {
                     variant="outlined"
                     color="inherit"
                     size="small"
-                    onClick={() => setAlertSettingsOpen(true)}
+                    onClick={(event) => setAlertsAnchor(event.currentTarget)}
+                    aria-haspopup="dialog"
                     aria-label={
                       activeAlerts.length > 0
-                        ? `Alert settings — ${activeAlerts.length} active`
-                        : 'Alert settings'
+                        ? `Alerts — ${activeAlerts.length} active`
+                        : 'Alerts'
                     }
                     sx={{ textTransform: 'none', borderRadius: 999, py: 0.25 }}
                   >
@@ -217,12 +219,6 @@ function App() {
             )
           ) : (
             <>
-              <AlertBanner
-                alerts={activeAlerts}
-                now={now}
-                onOpenSettings={() => setAlertSettingsOpen(true)}
-              />
-
               <AvailabilityPanel
                 noPoolSelected={isUnknownFilter}
                 scaleSets={visibleScaleSets}
@@ -292,6 +288,17 @@ function App() {
             </>
           )}
         </Container>
+
+        <AlertsPopover
+          anchorEl={alertsAnchor}
+          onClose={() => setAlertsAnchor(null)}
+          onOpenSettings={() => {
+            setAlertsAnchor(null);
+            setAlertSettingsOpen(true);
+          }}
+          alerts={activeAlerts}
+          now={now}
+        />
 
         <AlertSettingsDialog open={alertSettingsOpen} onClose={() => setAlertSettingsOpen(false)} />
       </div>
