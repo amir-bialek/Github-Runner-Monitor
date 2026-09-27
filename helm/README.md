@@ -30,6 +30,38 @@ The frontend's nginx forwards `/api` to a Service named exactly `backend` — th
 
 By default neither release makes itself reachable from outside the cluster. Turn on `ingress.enabled` in `values-frontend.yaml` and fill in a real host, or `kubectl port-forward svc/frontend 8080:80` to look at it locally.
 
+## Alerts
+
+The alert thresholds and the optional webhook are plain environment variables in `values-backend.yaml`, under `deployment.env.regular` (`ALERT_QUEUE_WAIT_MINUTES`, `ALERT_RUNNER_GROUP_OFFLINE_MINUTES`, `ALERT_WEBHOOK_URL` and friends — see the main [README](../README.md#alerts)). Override them at install time like any other value:
+
+```bash
+helm upgrade --install runner-monitor-backend ./chart \
+  -f values-backend.yaml \
+  --set deployment.env.regular.ALERT_QUEUE_WAIT_MINUTES=20 \
+  --set deployment.env.regular.ALERT_RUNNER_GROUP_OFFLINE_MINUTES=15
+```
+
+These are the starting values. They can be changed later from the page, and a change made there is saved next to the job list in `JOB_STATE_S3_BUCKET` and wins over the Helm value for that setting until someone presses **Reset to deployment values**. Set `ALERT_SETTINGS_EDITABLE: "false"` to keep the Helm values fixed.
+
+A webhook URL usually contains a secret. Rather than putting it in the values file, add it to the existing secret and reference it the same way as the token:
+
+```bash
+kubectl create secret generic github-runner-monitor-token \
+  --from-literal=token=<your-fine-grained-token> \
+  --from-literal=webhookSecret=<the-organisation-webhook-secret> \
+  --from-literal=alertWebhookUrl=<https://hooks.example.com/...> \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+```yaml
+    fromSecrets:
+    - envName: ALERT_WEBHOOK_URL
+      secretName: github-runner-monitor-token
+      secretKey: alertWebhookUrl
+```
+
+The backend needs outbound HTTPS to the webhook's host. If you turn on `networkpolicy`, allow that egress.
+
 ## Check the output before installing
 
 ```bash

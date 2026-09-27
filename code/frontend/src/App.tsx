@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
-import { AppBar, Badge, Box, Button, Container, CssBaseline, Toolbar, Typography } from '@mui/material';
+import { AppBar, Badge, Box, Button, Container, CssBaseline, Toolbar, Typography, alpha } from '@mui/material';
 import { ThemeMode, createAppTheme } from './theme';
 import { useScaleSets } from './hooks/useScaleSets';
 import { useQueue } from './hooks/useQueue';
@@ -153,7 +153,7 @@ function App() {
               <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
                 {APP_HEADING}
               </Typography>
-              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'flex-end', gap: 2 }}>
                 <Badge
                   badgeContent={activeAlerts.length}
                   color="error"
@@ -170,7 +170,18 @@ function App() {
                         ? `Alerts — ${activeAlerts.length} active`
                         : 'Alerts'
                     }
-                    sx={{ textTransform: 'none', borderRadius: 999, py: 0.25 }}
+                    sx={(theme) => ({
+                      textTransform: 'none',
+                      borderRadius: 999,
+                      minWidth: 0,
+                      px: 1.25,
+                      py: 0.375,
+                      fontSize: 13,
+                      fontWeight: 500,
+                      lineHeight: 1.3,
+                      letterSpacing: 0.1,
+                      borderColor: alpha(theme.palette.text.primary, 0.35),
+                    })}
                   >
                     Alerts
                   </Button>

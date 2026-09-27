@@ -1,6 +1,6 @@
 # GitHub Runner Monitor
 
-A live dashboard for self-hosted GitHub Actions runners. It shows how many runners are free, busy or offline in each pool, which jobs are waiting and in what order, what is running now, and what finished recently. Every job links out to GitHub for the full detail.
+A live dashboard for self-hosted GitHub Actions runners. It shows how many runners are free, busy or offline in each pool, which jobs are waiting and in what order, what is running now, and what finished recently. It also alerts when a job has waited too long or a runner pool has gone dark. Every job links out to GitHub for the full detail.
 
 <details open>
 <summary>Table of Contents</summary>
@@ -17,9 +17,9 @@ A live dashboard for self-hosted GitHub Actions runners. It shows how many runne
 
 ![The dashboard in the light theme, with the runner pools, the job queue, the running jobs and the recent history.](docs/images/dashboard-light.png)
 
-The top of the page, with the scale set picker and the theme switch:
+The top of the page, with the Alerts button (showing how many alerts are active) and the theme switch:
 
-![Close-up of the header, with the scale set picker and the Theme switch.](docs/images/header-controls.png)
+![Close-up of the header, with the Alerts button and its count, and the Theme switch.](docs/images/header-controls.png)
 
 The repositories and people in these pictures are made up. That is the fake data the app starts with.
 
@@ -53,6 +53,7 @@ To run it on Kubernetes instead, see [helm/README.md](helm/README.md).
 - **Job queue** — every waiting job, longest wait first, with the pool each is waiting for. Jobs GitHub named no pool for say "Unknown". GitHub does not publish a real queue position, so this order is worked out from when each job was created. The page says so.
 - **Running jobs** — what is on a runner at this moment and for how long.
 - **Recent history** — finished jobs with pass or fail, and the time each one finished, as supporting detail.
+- **Alerts** — the button in the header counts jobs stuck in the queue and runner pools with no online runner. Click it for the list. See [Alerts](#alerts).
 
 A job that ran on one of GitHub's own cloud runners, rather than a self-hosted one, shows its pool as "GitHub Actions (cloud)".
 
