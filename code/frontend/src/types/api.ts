@@ -118,3 +118,65 @@ export interface BackendSettings {
 export interface ApiErrorBody {
   error: string;
 }
+
+export type AlertKind = 'queue_wait' | 'runner_group_offline';
+
+export interface AlertJob {
+  id: number;
+  name: string;
+  repository: string;
+  htmlUrl: string;
+  createdAt: string;
+  waitMs: number;
+}
+
+export interface MonitorAlert {
+  id: string;
+  kind: AlertKind;
+  scaleSet: string | null;
+  thresholdMinutes: number;
+  since: string;
+  firedAt: string;
+  message: string;
+  jobCount?: number;
+  jobs?: AlertJob[];
+  totalRunners?: number;
+}
+
+export interface AlertsResponse {
+  evaluatedAt: string | null;
+  alerts: MonitorAlert[];
+}
+
+export interface AlertRuleSettings {
+  enabled: boolean;
+  thresholdMinutes: number;
+}
+
+export interface PublicAlertSettings {
+  queueWait: AlertRuleSettings;
+  runnerGroupOffline: AlertRuleSettings;
+  webhookConfigured: boolean;
+  webhookUrlMasked: string | null;
+}
+
+export interface WebhookStatus {
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+}
+
+export interface AlertSettingsResponse {
+  settings: PublicAlertSettings;
+  deploymentDefaults: PublicAlertSettings;
+  source: 'deployment' | 'ui';
+  editable: boolean;
+  persisted: boolean;
+  webhookStatus: WebhookStatus;
+}
+
+export interface AlertSettingsUpdate {
+  queueWait?: Partial<AlertRuleSettings>;
+  runnerGroupOffline?: Partial<AlertRuleSettings>;
+  webhookUrl?: string | null;
+}

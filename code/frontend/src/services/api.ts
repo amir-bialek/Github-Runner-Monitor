@@ -1,6 +1,10 @@
 import axios from 'axios'
 import type {
+  AlertSettingsResponse,
+  AlertSettingsUpdate,
+  AlertsResponse,
   BackendSettings,
+  WebhookStatus,
   HistoryJob,
   QueueResponse,
   Runner,
@@ -68,6 +72,31 @@ export const fetchJobHistory = async (scaleSet?: string, limit?: number): Promis
   if (limit) params.limit = limit
   const response = await api.get<HistoryJob[]>('/jobs/history', { params })
   return response.data
+}
+
+export const fetchAlerts = async (): Promise<AlertsResponse> => {
+  const response = await api.get<AlertsResponse>('/alerts')
+  return response.data
+}
+
+export const fetchAlertSettings = async (): Promise<AlertSettingsResponse> => {
+  const response = await api.get<AlertSettingsResponse>('/settings/alerts')
+  return response.data
+}
+
+export const updateAlertSettings = async (update: AlertSettingsUpdate): Promise<AlertSettingsResponse> => {
+  const response = await api.put<AlertSettingsResponse>('/settings/alerts', update)
+  return response.data
+}
+
+export const resetAlertSettings = async (): Promise<AlertSettingsResponse> => {
+  const response = await api.delete<AlertSettingsResponse>('/settings/alerts')
+  return response.data
+}
+
+export const sendTestAlert = async (): Promise<WebhookStatus> => {
+  const response = await api.post<{ webhookStatus: WebhookStatus }>('/settings/alerts/test')
+  return response.data.webhookStatus
 }
 
 export default api

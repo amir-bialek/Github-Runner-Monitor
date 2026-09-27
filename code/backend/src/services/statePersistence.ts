@@ -90,3 +90,33 @@ export function stopPeriodicSave(): void {
     timer = null;
   }
 }
+
+export async function readJsonObject(key: string): Promise<unknown | null> {
+  if (!persistenceEnabled()) return null;
+  try {
+    const { client: s3Client, commands } = await s3();
+    const response = await s3Client.send(new commands.GetObjectCommand({ Bucket: BUCKET, Key: key }));
+    const body = await response.Body?.transformToString();
+    return body ? JSON.parse(body) : null;
+  } catch (error: any) {
+    if (error?.name === 'NoSuchKey' || error?.$metadata?.httpStatusCode === 404) return null;
+    throw error;
+  }
+}
+
+export async function writeJsonObject(key: string, value: unknown): Promise<void> {
+  if (!persistenceEnabled()) return;
+  const { client: s3Client, commands } = await s3();
+  await s3Client.send(
+    new commands.PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: JSON.stringify(value),
+      ContentType: 'application/json',
+    })
+  );
+}
+
+export function describeLocation(key: string): string {
+  return `s3://${BUCKET}/${key}`;
+}

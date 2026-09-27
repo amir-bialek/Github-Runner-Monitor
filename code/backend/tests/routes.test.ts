@@ -63,6 +63,7 @@ describe('GET /scale-sets', () => {
         expect.objectContaining({ id: 'arc-linux-x64', totalRunners: 6, online: 5, busy: 2, free: 3 }),
         expect.objectContaining({ id: 'arc-gpu-a10', totalRunners: 4, online: 3, busy: 3, free: 0 }),
         expect.objectContaining({ id: 'arc-linux-arm64', totalRunners: 4, online: 3, busy: 1, free: 2 }),
+        expect.objectContaining({ id: 'arc-windows-x64', totalRunners: 2, online: 0, busy: 0, free: 0 }),
       ])
     );
   });

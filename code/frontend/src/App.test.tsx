@@ -14,6 +14,11 @@ vi.mock('./services/api', () => ({
   fetchJobHistory: vi.fn(),
   fetchRunners: vi.fn(),
   fetchSettings: vi.fn(),
+  fetchAlerts: vi.fn(),
+  fetchAlertSettings: vi.fn(),
+  updateAlertSettings: vi.fn(),
+  resetAlertSettings: vi.fn(),
+  sendTestAlert: vi.fn(),
 }));
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();
@@ -201,6 +206,7 @@ describe('App dashboard', () => {
     vi.mocked(api.fetchRunningJobs).mockResolvedValue(mockRunning);
     vi.mocked(api.fetchJobHistory).mockResolvedValue(mockHistory);
     vi.mocked(api.fetchSettings).mockResolvedValue({ runnersRefreshSeconds: 30 });
+    vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: null, alerts: [] });
   });
 
   afterEach(() => {
