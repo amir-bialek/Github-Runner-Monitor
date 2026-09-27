@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Button, Divider, Popover, SvgIcon, Typography } from '@mui/material';
+import { Box, Divider, Link, Popover, SvgIcon, Typography } from '@mui/material';
 import type { MonitorAlert } from '../types/api';
 import { formatCompactDuration } from '../utils/format';
 import ExternalLink from './ExternalLink';
@@ -21,8 +21,15 @@ interface AlertLine {
 }
 
 const WarningIcon: React.FC = () => (
-  <SvgIcon viewBox="0 0 24 24" sx={{ fontSize: 20, color: 'text.secondary' }} aria-hidden>
-    <path d="M12 2 1 21h22L12 2zm0 4.2L19.5 19h-15L12 6.2zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
+  <SvgIcon viewBox="0 0 24 24" sx={{ fontSize: 22 }} aria-hidden>
+    <path
+      d="M12 3.5 2.5 20h19L12 3.5z"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.6}
+      strokeLinejoin="round"
+    />
+    <path d="M10.8 9h2.4l-.4 6h-1.6l-.4-6zm1.2 7.3a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z" fill="#d32f2f" />
   </SvgIcon>
 );
 
@@ -109,10 +116,10 @@ const AlertsPopover: React.FC<AlertsPopoverProps> = ({ anchorEl, onClose, onOpen
         )}
       </Box>
       <Divider />
-      <Box sx={{ px: 1, py: 0.5, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="small" color="inherit" onClick={onOpenSettings} sx={{ textTransform: 'none' }}>
+      <Box sx={{ px: 2, py: 1, display: 'flex', justifyContent: 'flex-end' }}>
+        <Link component="button" variant="body2" underline="hover" onClick={onOpenSettings}>
           Alert settings
-        </Button>
+        </Link>
       </Box>
     </Popover>
   );
