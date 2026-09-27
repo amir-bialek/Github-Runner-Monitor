@@ -1,5 +1,7 @@
 import { app } from './app.ts';
 import { loadState, saveState, startPeriodicSave, stopPeriodicSave } from './services/statePersistence.ts';
+import { loadAlertState, saveAlertState, startAlertLoop, stopAlertLoop } from './services/alerts.ts';
+import { gatherAlertInput } from './services/alertInput.ts';
 
 const PORT = process.env.PORT || 3001;
 
@@ -11,7 +13,9 @@ const server = app.listen(PORT, () => {
   console.log(`Backend server is running on port ${PORT}`);
 });
 
-void loadState().then(() => startPeriodicSave());
+void Promise.all([loadState().then(() => startPeriodicSave()), loadAlertState()]).then(() =>
+  startAlertLoop(gatherAlertInput)
+);
 
 let shuttingDown = false;
 
@@ -29,8 +33,10 @@ async function shutdown(signal: string): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
 
   stopPeriodicSave();
+  stopAlertLoop();
   await new Promise<void>(resolve => server.close(() => resolve()));
   await saveState(true);
+  await saveAlertState();
 
   console.log('[AUDIT] Shutdown complete');
   process.exit(0);

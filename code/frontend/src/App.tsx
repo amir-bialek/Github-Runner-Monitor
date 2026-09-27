@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
-import { AppBar, Box, Container, CssBaseline, Toolbar, Typography } from '@mui/material';
+import { AppBar, Badge, Box, Button, Container, CssBaseline, Toolbar, Typography } from '@mui/material';
 import { ThemeMode, createAppTheme } from './theme';
 import { useScaleSets } from './hooks/useScaleSets';
 import { useQueue } from './hooks/useQueue';
 import { useRunningJobs } from './hooks/useRunningJobs';
 import { useJobHistory } from './hooks/useJobHistory';
 import { useSettings } from './hooks/useSettings';
+import { useAlerts } from './hooks/useAlerts';
 import { REFRESH_INTERVAL_MS } from './queryClient';
 import { QUEUE_MAX_ITEMS } from './appConfig';
 import { useNow } from './hooks/useNow';
@@ -16,6 +17,8 @@ import AvailabilityPanel from './components/AvailabilityPanel';
 import QueueSection from './components/QueueSection';
 import RunningSection from './components/RunningSection';
 import HistorySection from './components/HistorySection';
+import AlertBanner from './components/AlertBanner';
+import AlertSettingsDialog from './components/AlertSettingsDialog';
 import { APP_HEADING, APP_TAB_TITLE } from './appConfig';
 import ErrorState from './components/ErrorState';
 import { explanationFromBackend } from './services/apiError';
@@ -44,6 +47,9 @@ function App() {
   const runningQuery = useRunningJobs(scaleSetParam);
   const historyQuery = useJobHistory(scaleSetParam);
   const settingsQuery = useSettings();
+  const alertsQuery = useAlerts();
+  const [alertSettingsOpen, setAlertSettingsOpen] = useState(false);
+  const activeAlerts = useMemo(() => alertsQuery.data?.alerts ?? [], [alertsQuery.data]);
 
   const allScaleSets = useMemo(() => scaleSetsQuery.data ?? [], [scaleSetsQuery.data]);
   const visibleScaleSets = useMemo(
@@ -104,11 +110,15 @@ function App() {
   }, [scaleSetsQuery, queueQuery, runningQuery, historyQuery]);
 
   useEffect(() => {
-    document.title =
+    const waiting =
       matchingQueueItems.length > 0
         ? `${matchingQueueItems.length} waiting · ${APP_TAB_TITLE}`
         : APP_TAB_TITLE;
-  }, [matchingQueueItems.length]);
+    document.title =
+      activeAlerts.length > 0
+        ? `⚠ ${activeAlerts.length === 1 ? '1 alert' : `${activeAlerts.length} alerts`} · ${waiting}`
+        : waiting;
+  }, [matchingQueueItems.length, activeAlerts.length]);
 
   const statusMessage = useMemo(() => {
     if (everythingFailed) return '';
@@ -142,7 +152,27 @@ function App() {
               <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
                 {APP_HEADING}
               </Typography>
-              <Box sx={{ ml: 'auto' }}>
+              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Badge
+                  badgeContent={activeAlerts.length}
+                  color="error"
+                  overlap="rectangular"
+                >
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    size="small"
+                    onClick={() => setAlertSettingsOpen(true)}
+                    aria-label={
+                      activeAlerts.length > 0
+                        ? `Alert settings — ${activeAlerts.length} active`
+                        : 'Alert settings'
+                    }
+                    sx={{ textTransform: 'none', borderRadius: 999, py: 0.25 }}
+                  >
+                    Alerts
+                  </Button>
+                </Badge>
                 <ThemeToggle mode={themeMode} onToggle={handleThemeToggle} />
               </Box>
             </Toolbar>
@@ -187,6 +217,12 @@ function App() {
             )
           ) : (
             <>
+              <AlertBanner
+                alerts={activeAlerts}
+                now={now}
+                onOpenSettings={() => setAlertSettingsOpen(true)}
+              />
+
               <AvailabilityPanel
                 noPoolSelected={isUnknownFilter}
                 scaleSets={visibleScaleSets}
@@ -256,6 +292,8 @@ function App() {
             </>
           )}
         </Container>
+
+        <AlertSettingsDialog open={alertSettingsOpen} onClose={() => setAlertSettingsOpen(false)} />
       </div>
     </ThemeProvider>
   );

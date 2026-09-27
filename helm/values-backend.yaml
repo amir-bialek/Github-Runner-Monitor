@@ -54,6 +54,18 @@ deployment:
       # Leave empty and nothing is saved or read back.
       JOB_STATE_S3_BUCKET: ""
       JOB_STATE_S3_KEY: "github-runner-monitor/job-store.json"
+      # Alerting. These are the deploy-time values; the Alerts dialog in the
+      # UI can change them later, and a change made there is saved to the
+      # same bucket as the job list (ALERT_STATE_S3_KEY) and wins over these
+      # until someone presses "Reset to deployment values".
+      ALERT_QUEUE_WAIT_ENABLED: "true"
+      ALERT_QUEUE_WAIT_MINUTES: "15"
+      ALERT_RUNNER_GROUP_OFFLINE_ENABLED: "true"
+      ALERT_RUNNER_GROUP_OFFLINE_MINUTES: "10"
+      # Empty means alerts are shown on screen only.
+      ALERT_WEBHOOK_URL: ""
+      ALERT_SETTINGS_EDITABLE: "true"
+      ALERT_STATE_S3_KEY: "github-runner-monitor/alert-state.json"
     # Neither of these goes in this file. Create the secret yourself first:
     #   kubectl create secret generic github-runner-monitor-token \
     #     --from-literal=token=<your-fine-grained-token> \

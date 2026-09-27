@@ -25,6 +25,9 @@ export const mockRunners: GitHubRunner[] = [
   { id: 302, name: 'arc-linux-arm64-6b2c8', os: 'linux', status: 'online', busy: false, labels: [label(11, 'self-hosted', 'read-only'), label(12, 'linux', 'read-only'), label(13, 'arm64')] },
   { id: 303, name: 'arc-linux-arm64-d40e5', os: 'linux', status: 'online', busy: true, labels: [label(11, 'self-hosted', 'read-only'), label(12, 'linux', 'read-only'), label(13, 'arm64')] },
   { id: 304, name: 'arc-linux-arm64-31ba9', os: 'linux', status: 'offline', busy: false, labels: [label(11, 'self-hosted', 'read-only'), label(12, 'linux', 'read-only'), label(13, 'arm64')] },
+
+  { id: 401, name: 'arc-windows-x64-5e7a2', os: 'windows', status: 'offline', busy: false, labels: [label(15, 'self-hosted', 'read-only'), label(16, 'windows', 'read-only'), label(17, 'x64', 'read-only')] },
+  { id: 402, name: 'arc-windows-x64-c18b9', os: 'windows', status: 'offline', busy: false, labels: [label(15, 'self-hosted', 'read-only'), label(16, 'windows', 'read-only'), label(17, 'x64', 'read-only')] },
 ];
 
 const REPOS = ['acme/web-app', 'acme/platform', 'acme/infra-tools', 'acme/billing-service', 'acme/deploy-tools'];

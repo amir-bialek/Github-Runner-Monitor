@@ -1,23 +1,29 @@
 import express from 'express';
 import { authenticateGitHub } from './middleware/auth.ts';
-import { GitHubClient } from './services/githubClient.ts';
 import { getHealthMetrics } from './services/performanceMonitor.ts';
-import {
-  setCachedData,
-  getCachedData,
-  generateRunnerCacheKey,
-  runnersCache,
-  RUNNERS_TTL_SECONDS,
-} from './services/cache.ts';
-import { requestBatcher } from './middleware/requestBatching.ts';
-import { transformRunnersCollection, buildScaleSets } from './services/dataTransformation.ts';
+import { RUNNERS_TTL_SECONDS } from './services/cache.ts';
+import { buildScaleSets } from './services/dataTransformation.ts';
 import { recordAPICallStart } from './services/performanceMonitor.ts';
-import { isMockMode, mockRunners } from './services/mockData.ts';
+import { isMockMode } from './services/mockData.ts';
+import { getRunnersSnapshot } from './services/runnersSnapshot.ts';
 import { getQueueAndRunning, getHistory } from './services/jobsService.ts';
 import { createWebhookRouter } from './routes/githubWebhook.ts';
 import { stats as jobStoreStats } from './services/jobStore.ts';
+import {
+  activeAlerts,
+  currentSettings,
+  currentWebhookStatus,
+  evaluate,
+  lastEvaluatedAt,
+  resetSettings,
+  sendTestNotification,
+  settingsSource,
+  updateSettings,
+} from './services/alerts.ts';
+import { gatherAlertInput } from './services/alertInput.ts';
+import { deploymentDefaults, maskWebhookUrl, parseOverride, settingsEditable, type AlertSettings } from './services/alertSettings.ts';
+import { persistenceEnabled } from './services/statePersistence.ts';
 import { QUEUE_ORDERING_NOTE, RUNNING_ORDER_NOTE, noteFor } from './services/dataTransformation.ts';
-import type { InternalRunner } from './types/github.ts';
 
 // A mistyped value here used to become NaN, and slice(0, NaN) returns nothing,
 // so one bad character in the Helm values emptied a whole section of the page.
@@ -52,31 +58,6 @@ app.get('/health', (req, res) => {
     jobStore: jobStoreStats(),
   });
 });
-
-async function getRunnersSnapshot(org: string, token: string): Promise<InternalRunner[]> {
-  if (isMockMode()) {
-    return transformRunnersCollection(mockRunners);
-  }
-
-  const cacheKey = generateRunnerCacheKey(org);
-  const cached = getCachedData<InternalRunner[]>(runnersCache, cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  const runners = await requestBatcher.batchRequest(
-    `runners:${org}`,
-    async () => {
-      const client = new GitHubClient(token);
-      return client.getRunners(org);
-    },
-    cacheKey
-  );
-
-  const transformed = transformRunnersCollection(runners);
-  setCachedData(runnersCache, cacheKey, transformed);
-  return transformed;
-}
 
 function filterByScaleSet<T extends { scaleSet: { id: string } | string | null }>(
   items: T[],
@@ -247,6 +228,83 @@ app.get('/jobs/history', authenticateGitHub, async (req, res) => {
 
 app.get('/settings', (req, res) => {
   res.json({ runnersRefreshSeconds: RUNNERS_TTL_SECONDS });
+});
+
+function publicSettings(settings: AlertSettings) {
+  return {
+    queueWait: settings.queueWait,
+    runnerGroupOffline: settings.runnerGroupOffline,
+    webhookConfigured: settings.webhookUrl !== null,
+    webhookUrlMasked: maskWebhookUrl(settings.webhookUrl),
+  };
+}
+
+function alertSettingsResponse() {
+  return {
+    settings: publicSettings(currentSettings()),
+    deploymentDefaults: publicSettings(deploymentDefaults()),
+    source: settingsSource(),
+    editable: settingsEditable(),
+    persisted: persistenceEnabled(),
+    webhookStatus: currentWebhookStatus(),
+  };
+}
+
+async function reevaluate(): Promise<void> {
+  try {
+    await evaluate(await gatherAlertInput());
+  } catch (error: any) {
+    console.error(`[ERROR] Alert evaluation failed: ${error?.message ?? error}`);
+  }
+}
+
+app.get('/alerts', (req, res) => {
+  res.json({ evaluatedAt: lastEvaluatedAt(), alerts: activeAlerts() });
+});
+
+app.get('/settings/alerts', (req, res) => {
+  res.json(alertSettingsResponse());
+});
+
+function refuseIfLocked(res: express.Response): boolean {
+  if (settingsEditable()) return false;
+  res.status(403).json({ error: 'Alert settings are locked by the deployment (ALERT_SETTINGS_EDITABLE=false)' });
+  return true;
+}
+
+app.put('/settings/alerts', async (req, res) => {
+  if (refuseIfLocked(res)) return;
+  const parsed = parseOverride(req.body);
+  if (!parsed.ok) {
+    res.status(400).json({ error: parsed.errors.join('; '), errors: parsed.errors });
+    return;
+  }
+  await updateSettings(parsed.value);
+  console.log('[AUDIT] Alert settings changed from the UI');
+  await reevaluate();
+  res.json(alertSettingsResponse());
+});
+
+app.delete('/settings/alerts', async (req, res) => {
+  if (refuseIfLocked(res)) return;
+  await resetSettings();
+  console.log('[AUDIT] Alert settings reset to the deployment values');
+  await reevaluate();
+  res.json(alertSettingsResponse());
+});
+
+app.post('/settings/alerts/test', async (req, res) => {
+  if (refuseIfLocked(res)) return;
+  if (!currentSettings().webhookUrl) {
+    res.status(400).json({ error: 'No webhook URL is configured' });
+    return;
+  }
+  const status = await sendTestNotification();
+  if (status.lastError) {
+    res.status(502).json({ error: `Test failed: ${status.lastError}`, webhookStatus: status });
+    return;
+  }
+  res.json({ webhookStatus: status });
 });
 
 app.get('/', (req, res) => {

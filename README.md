@@ -7,6 +7,7 @@ A live dashboard for self-hosted GitHub Actions runners. It shows how many runne
 
 - [Run it](#run-it)
 - [What it shows](#what-it-shows)
+- [Alerts](#alerts)
 - [Using real GitHub data](#using-real-github-data)
 - [Configuration](#configuration)
 - [The API](#the-api)
@@ -34,7 +35,7 @@ docker compose -f docker/docker-compose.yml up --build -d
 
 Open **http://localhost:8080**.
 
-It starts with made-up data, so it works straight away. One runner pool is deliberately full with jobs backed up behind it, so the queue has something to show.
+It starts with made-up data, so it works straight away. One runner pool is deliberately full with jobs backed up behind it, so the queue has something to show, and another has every runner offline, so the alerts do too.
 
 To stop it:
 
@@ -64,6 +65,43 @@ The job queue and running jobs tables show 10 rows at a time and recent history 
 The job tables refresh themselves every 15 seconds and the Available runners panel every 30 seconds, and again whenever you switch back to its browser tab after being away. There is no manual refresh button — each section says on its own heading line how old its data is, so you can see whether it is current.
 
 The page shows the numbers and leaves the reading of them to you. It does not add sentences explaining what the numbers mean. There is no log view.
+
+## Alerts
+
+Two alerts watch for trouble so you do not have to keep reading the tables:
+
+- **Jobs stuck in the queue** — a job has been waiting for a runner longer than the queue wait threshold (15 minutes unless you change it). There is one alert per pool, listing its stuck jobs longest first, each linking to GitHub. Jobs with no known pool get their own "unknown pool" alert.
+- **Runner group offline** — a pool has had no online runner for longer than the offline threshold (10 minutes unless you change it). A pool that vanishes from GitHub's runner list altogether counts too, for up to 7 days after it was last seen. If GitHub cannot be reached, offline alerts are left as they were instead of being raised or cleared on missing data.
+
+Active alerts sit at the top of the page, offline pools first. The **Alerts** button in the header shows how many are active, and so does the browser tab title. The backend checks every 30 seconds whether or not anyone has the page open.
+
+![An offline runner group alert and a stuck queue alert at the top of the dashboard.](docs/images/alerts-banner.png)
+
+### Changing the thresholds
+
+The starting values come from the deployment — the `ALERT_*` variables below, set in Helm values or `.env`. After that, anyone with the page open can change them from **Alerts** in the header: turn each alert on or off, change its threshold in minutes, and set or remove a webhook.
+
+![The Alert settings dialog.](docs/images/alert-settings.png)
+
+A change made in the dialog wins over the deployment value for that setting, and settings nobody changed keep following the deployment. **Reset to deployment values** removes the dialog's changes. With `JOB_STATE_S3_BUCKET` set, changes are saved to that bucket (at `ALERT_STATE_S3_KEY`) as soon as you press Save, so they survive a restart, the same way the job list does. Without a bucket they last until the backend restarts, and the dialog says so. Set `ALERT_SETTINGS_EDITABLE=false` to make the dialog read-only and keep the deployment values fixed.
+
+### Webhook
+
+By default alerts are shown on screen only. Add a webhook URL and the backend also POSTs JSON to it once when an alert fires and once when it clears — not on every check:
+
+```json
+{
+  "source": "github-runner-monitor",
+  "event": "alert.fired",
+  "text": ":warning: 2 jobs have waited longer than 15 minutes for arc-gpu-a10",
+  "alert": { "id": "queue_wait:arc-gpu-a10", "kind": "queue_wait", "scaleSet": "arc-gpu-a10", "message": "…", "since": "…", "jobs": ["…"] },
+  "sentAt": "2026-09-27T12:00:00.000Z"
+}
+```
+
+`event` is `alert.fired` or `alert.resolved`. The `text` field means a Slack or Microsoft Teams incoming webhook can take it as is. **Send test** in the dialog posts a test message. The dialog only ever shows the webhook's host, since the rest of such a URL is usually the secret, and it shows the last delivery's result.
+
+The dashboard has no login, so anyone who can open the page can change where the webhook points. If that matters where you run it, set the webhook from Helm and set `ALERT_SETTINGS_EDITABLE=false`.
 
 ## Using real GitHub data
 
@@ -139,6 +177,14 @@ Every setting below is an environment variable read by the backend container. Th
 | `JOB_STATE_S3_KEY` | `github-runner-monitor/job-store.json` | The object inside that bucket. |
 | `JOB_STATE_SAVE_INTERVAL_SECONDS` | `60` | How often the job list is written out. Nothing is written when nothing has changed. |
 | `AWS_REGION` | `us-east-2` | Region of the S3 bucket above. |
+| `ALERT_QUEUE_WAIT_ENABLED` | `true` | Whether the "jobs stuck in the queue" alert is on. Can be changed later from the page — see [Alerts](#alerts). |
+| `ALERT_QUEUE_WAIT_MINUTES` | `15` | How long a job may wait for a runner before it raises an alert, in whole minutes. |
+| `ALERT_RUNNER_GROUP_OFFLINE_ENABLED` | `true` | Whether the "runner group offline" alert is on. |
+| `ALERT_RUNNER_GROUP_OFFLINE_MINUTES` | `10` | How long a pool may have no online runner before it raises an alert, in whole minutes. |
+| `ALERT_WEBHOOK_URL` | empty | Where to POST alerts as they fire and clear. Empty means on screen only. |
+| `ALERT_SETTINGS_EDITABLE` | `true` | `false` makes the alert settings read-only on the page. |
+| `ALERT_STATE_S3_KEY` | `github-runner-monitor/alert-state.json` | The object in `JOB_STATE_S3_BUCKET` where alert settings changed on the page are saved. |
+| `ALERT_EVALUATION_INTERVAL_SECONDS` | `30` | How often the alerts are checked. |
 | `JOB_STORE_MAX_JOBS` | `5000` | Most jobs held in memory at once. |
 | `JOB_STORE_MAX_AGE_DAYS` | `7` | How old a finished job may be and still show up under "recent history". |
 | `JOB_STORE_STUCK_HOURS` | `12` | A job still showing as queued or running this long after it started is assumed to have had its "finished" message lost, and stops being shown as live. |
@@ -198,6 +244,11 @@ The browser only ever calls paths starting with `/api`. Nginx passes them to the
 | `GET /api/jobs/running` | Jobs on a runner now, longest first |
 | `GET /api/jobs/history` | Recent finished jobs with their result |
 | `GET /api/settings` | The runner refresh rate the Available runners heading prints, taken from `CACHE_TTL_RUNNERS_SECONDS` |
+| `GET /api/alerts` | The alerts active at the last check |
+| `GET /api/settings/alerts` | The alert settings in use, the deployment values, and where they came from. The webhook URL is shown masked. |
+| `PUT /api/settings/alerts` | Change alert settings. Takes any of `queueWait`, `runnerGroupOffline` (`{ enabled, thresholdMinutes }`) and `webhookUrl` (`null` removes it) |
+| `DELETE /api/settings/alerts` | Go back to the deployment values |
+| `POST /api/settings/alerts/test` | Send a test message to the webhook |
 | `POST /api/webhooks/github` | Where GitHub posts job events. Not for browser use — see [The webhook](#the-webhook). |
 
 `/api/jobs/queue`, `/api/jobs/running`, `/api/jobs/history`, `/api/runners` and `/api/scale-sets` all accept `?scaleSet=<id>` to narrow the results to a single pool. `/api/jobs/history` also accepts `?limit=<n>`, capped by `HISTORY_MAX_LIMIT`.
