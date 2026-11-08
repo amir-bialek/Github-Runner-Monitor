@@ -21,6 +21,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY code/backend/src ./src
 
+# The Debug it result schema (AD-17), shared with the Debug Job. The backend
+# resolves it from its working directory as ../debug-job/schema/.
+COPY code/debug-job/schema /debug-job/schema
+
 RUN addgroup -g 1001 -S nodejs \
   && adduser -S nodejs -u 1001 \
   && chown -R nodejs:nodejs /app

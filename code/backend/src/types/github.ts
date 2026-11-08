@@ -504,6 +504,11 @@ export interface JobRunningItem {
   runUrl: string;
 }
 
+export interface DebugTarget {
+  kind: 'job' | 'run';
+  id: number;
+}
+
 export interface JobHistoryItem {
   id: number;
   name: string;
@@ -522,4 +527,5 @@ export interface JobHistoryItem {
   durationMs: number | null;
   htmlUrl: string;
   runUrl: string;
+  target: DebugTarget;
 }

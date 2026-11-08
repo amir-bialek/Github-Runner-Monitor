@@ -24,19 +24,10 @@ import { gatherAlertInput } from './services/alertInput.ts';
 import { deploymentDefaults, maskWebhookUrl, parseOverride, settingsEditable, type AlertSettings } from './services/alertSettings.ts';
 import { persistenceEnabled } from './services/statePersistence.ts';
 import { QUEUE_ORDERING_NOTE, RUNNING_ORDER_NOTE, noteFor } from './services/dataTransformation.ts';
-
-// A mistyped value here used to become NaN, and slice(0, NaN) returns nothing,
-// so one bad character in the Helm values emptied a whole section of the page.
-function positiveInt(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') return fallback;
-  const parsed = parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    console.warn(`${name}="${raw}" is not a whole number above zero — using ${fallback}`);
-    return fallback;
-  }
-  return parsed;
-}
+import { positiveInt } from './services/envConfig.ts';
+import { debugItConfig } from './services/debugItConfig.ts';
+import { registerDebugIt } from './routes/debugIt.ts';
+import type { DebugItLocals } from './routes/checkChain.ts';
 
 const HISTORY_DEFAULT_LIMIT = positiveInt('HISTORY_DEFAULT_LIMIT', 200);
 const HISTORY_MAX_LIMIT = positiveInt('HISTORY_MAX_LIMIT', 200);
@@ -58,6 +49,10 @@ app.get('/health', (req, res) => {
     jobStore: jobStoreStats(),
   });
 });
+
+// Debug it: nothing is mounted, and no request is asked for a session, unless
+// DEBUG_IT_ENABLED is true.
+registerDebugIt(app, debugItConfig);
 
 function filterByScaleSet<T extends { scaleSet: { id: string } | string | null }>(
   items: T[],
@@ -272,6 +267,13 @@ function refuseIfLocked(res: express.Response): boolean {
   return true;
 }
 
+// With Debug it on, the alert settings gate has put the signed in
+// administrator in res.locals.debugIt; with it off this is empty (1.x text).
+function auditActor(res: express.Response): string {
+  const actor = res.locals.debugIt as DebugItLocals | undefined;
+  return actor && typeof actor.uid === 'number' ? ` by GitHub user ${actor.uid} (${actor.login})` : '';
+}
+
 app.put('/settings/alerts', async (req, res) => {
   if (refuseIfLocked(res)) return;
   const parsed = parseOverride(req.body);
@@ -280,7 +282,7 @@ app.put('/settings/alerts', async (req, res) => {
     return;
   }
   await updateSettings(parsed.value);
-  console.log('[AUDIT] Alert settings changed from the UI');
+  console.log(`[AUDIT] Alert settings changed from the UI${auditActor(res)}`);
   await reevaluate();
   res.json(alertSettingsResponse());
 });
@@ -288,7 +290,7 @@ app.put('/settings/alerts', async (req, res) => {
 app.delete('/settings/alerts', async (req, res) => {
   if (refuseIfLocked(res)) return;
   await resetSettings();
-  console.log('[AUDIT] Alert settings reset to the deployment values');
+  console.log(`[AUDIT] Alert settings reset to the deployment values${auditActor(res)}`);
   await reevaluate();
   res.json(alertSettingsResponse());
 });

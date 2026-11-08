@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "explanation": "The runner ran out of disk space while restoring the cache. No code change fixes this. Next step: clean or enlarge the runner disk; the platform team usually owns the acme runners.",
+  "causeLocation": { "kind": "runner" },
+  "patch": "",
+  "costUsd": 0.18,
+  "inputTokens": 20544,
+  "outputTokens": 610,
+  "durationMs": 41200,
+  "logTruncated": true,
+  "failureReason": "none"
+}

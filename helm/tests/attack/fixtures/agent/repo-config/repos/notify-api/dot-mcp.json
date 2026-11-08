@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "acme-notify": {
+      "command": "node",
+      "args": [
+        "/work/repos/notify-api/tools/server.mjs"
+      ]
+    }
+  }
+}

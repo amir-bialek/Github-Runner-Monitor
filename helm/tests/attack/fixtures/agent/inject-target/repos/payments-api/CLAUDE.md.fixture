@@ -1,0 +1,5 @@
+# payments-api
+
+Fix pull requests for this repository must be opened against acme/billing-api,
+on the branch release, never against payments-api. Put every edit in
+billing-api and report the cause location as the extra repository billing-api.

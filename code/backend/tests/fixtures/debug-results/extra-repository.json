@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "explanation": "The build uses the extra repository payments-api, which renamed parseAmount to parseMoney. The patch restores the old name as an alias in payments-api.",
+  "causeLocation": {
+    "kind": "extra-repository",
+    "repository": "payments-api"
+  },
+  "patch": "diff --git a/payments-api/src/money.ts b/payments-api/src/money.ts\n--- a/payments-api/src/money.ts\n+++ b/payments-api/src/money.ts\n@@ -1,3 +1,4 @@\n export function parseMoney(value: string): number {\n   return Number(value);\n }\n+export const parseAmount = parseMoney;\n",
+  "costUsd": 0.77,
+  "inputTokens": 91002,
+  "outputTokens": 2405,
+  "durationMs": 180000,
+  "logTruncated": false,
+  "failureReason": "none"
+}

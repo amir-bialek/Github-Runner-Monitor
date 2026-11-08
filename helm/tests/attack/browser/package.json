@@ -1,0 +1,10 @@
+{
+  "name": "debug-it-browser-attack-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Story 7.4: Playwright (Chromium) for helm/tests/attack/browser-attack.mjs. Test-only; never shipped.",
+  "type": "module",
+  "dependencies": {
+    "playwright": "1.64.1"
+  }
+}

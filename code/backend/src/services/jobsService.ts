@@ -1,4 +1,4 @@
-import { isMockMode, mockJobs, mockRunContext } from './mockData.ts';
+import { isMockMode, mockFailedRuns, mockJobs, mockRunContext } from './mockData.ts';
 import {
   assignQueuePositions,
   extractRepositoryFromJob,
@@ -7,7 +7,7 @@ import {
   toJobQueueItem,
   toJobRunningItem,
 } from './dataTransformation.ts';
-import { buildSnapshot } from './jobStore.ts';
+import { buildSnapshot, toRunHistoryItem } from './jobStore.ts';
 import type { GitHubJob, JobHistoryItem, JobQueueItem, JobRunningItem } from '../types/github.ts';
 
 export const DEFAULT_HISTORY_MAX_AGE_DAYS = 7;
@@ -41,6 +41,7 @@ function buildSnapshotFromMock(scaleSetSlugs: string[]): JobSnapshot {
   const history = mockJobs
     .filter(job => job.status === 'completed')
     .map(job => toJobHistoryItem(job, repositoryOf(job), mockRunContext(job), scaleSetSlugs))
+    .concat(mockFailedRuns.map(toRunHistoryItem))
     .sort((a, b) => new Date(b.completedAt ?? b.createdAt).getTime() - new Date(a.completedAt ?? a.createdAt).getTime());
 
   return { queue: assignQueuePositions(queueDrafts), running: orderRunningJobs(running), history, incomplete: false };

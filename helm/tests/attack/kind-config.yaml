@@ -1,0 +1,12 @@
+# Story 7.1: the kind cluster of the attack tests. kind's own CNI (kindnet)
+# does not enforce NetworkPolicies, so it is turned off and Calico is
+# installed instead (see .github/workflows/attack-tests.yml). The pod subnet
+# is Calico's default IP pool.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: attack-test
+networking:
+  disableDefaultCNI: true
+  podSubnet: 192.168.0.0/16
+nodes:
+- role: control-plane

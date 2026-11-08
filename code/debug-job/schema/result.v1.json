@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Result of one Debug it run, sent by the Debug Job to the backend results port (POST /results/{runId}). Schema version 1. This file is the only contract shared by the Debug Job and the backend. All text fields are untrusted.",
+  "x-maxBodyBytes": 262144,
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "explanation",
+    "causeLocation",
+    "patch",
+    "costUsd",
+    "inputTokens",
+    "outputTokens",
+    "durationMs",
+    "logTruncated",
+    "failureReason"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "Version of this result format. Always 1 for this schema.",
+      "const": 1
+    },
+    "explanation": {
+      "description": "Plain text explanation of why the job failed. When the patch is empty it gives the next step and the usual owner. Untrusted text.",
+      "type": "string",
+      "minLength": 1
+    },
+    "causeLocation": {
+      "description": "Where the cause of the failure lies. `repository` is present only, and exactly, when `kind` is `extra-repository`.",
+      "oneOf": [
+        {
+          "description": "A cause outside any extra repository.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "description": "this-repository: the failing repository; workflow-file: the workflow file; runner: the runner or runner image; infrastructure: the infrastructure; unknown: not determined.",
+              "enum": ["this-repository", "workflow-file", "runner", "infrastructure", "unknown"]
+            }
+          }
+        },
+        {
+          "description": "A cause in a named extra repository.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "repository"],
+          "properties": {
+            "kind": {
+              "description": "The cause is in an extra repository.",
+              "const": "extra-repository"
+            },
+            "repository": {
+              "description": "Name of the extra repository (its folder name under /work/repos).",
+              "type": "string",
+              "pattern": "^(?!\\.{1,2}$)[A-Za-z0-9._-]{1,100}$"
+            }
+          }
+        }
+      ]
+    },
+    "patch": {
+      "description": "Proposed fix as a unified diff. File paths use the prefixes a/{folder}/{path} and b/{folder}/{path}, where {folder} is the repository name under /work/repos and {path} is the file path inside that repository. An empty patch (\"\") is valid: no change is proposed and the explanation gives the next step and the usual owner. Untrusted text.",
+      "type": "string"
+    },
+    "costUsd": {
+      "description": "Anthropic API cost of the run in US dollars.",
+      "type": "number",
+      "minimum": 0
+    },
+    "inputTokens": {
+      "description": "Input tokens used by the run.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "outputTokens": {
+      "description": "Output tokens used by the run.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "durationMs": {
+      "description": "Time the agent ran, in milliseconds.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "logTruncated": {
+      "description": "True when the job log was over the log limit and only its last part was given to the agent.",
+      "type": "boolean"
+    },
+    "failureReason": {
+      "description": "none: the run finished normally; time-limit: the time limit was hit; spend-limit: the spend limit was hit; error: the agent failed. Any explanation already produced is kept.",
+      "enum": ["none", "time-limit", "spend-limit", "error"]
+    }
+  }
+}

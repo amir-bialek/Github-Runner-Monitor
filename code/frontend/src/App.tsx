@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
-import { AppBar, Badge, Box, Button, Container, CssBaseline, Toolbar, Typography, alpha } from '@mui/material';
+import { Box, Container, CssBaseline } from '@mui/material';
 import { ThemeMode, createAppTheme } from './theme';
 import { useScaleSets } from './hooks/useScaleSets';
 import { useQueue } from './hooks/useQueue';
@@ -13,6 +13,13 @@ import { QUEUE_MAX_ITEMS } from './appConfig';
 import { useNow } from './hooks/useNow';
 import ScaleSetScope from './components/ScaleSetScope';
 import ThemeToggle from './components/ThemeToggle';
+import AppLayout, { AlertsPlacement, LayoutItem, LayoutProps } from './components/AppLayout';
+import DebugItSettingsPage from './components/DebugItSettingsPage';
+import SecurityPage from './components/SecurityPage';
+import SignInPage from './components/SignInPage';
+import PersonalKeyDialog from './components/PersonalKeyDialog';
+import { personalKeyMode } from './components/DebugItAction';
+import { useSession, useSignOut } from './hooks/useSession';
 import AvailabilityPanel from './components/AvailabilityPanel';
 import QueueSection from './components/QueueSection';
 import RunningSection from './components/RunningSection';
@@ -23,6 +30,7 @@ import { APP_HEADING, APP_TAB_TITLE } from './appConfig';
 import ErrorState from './components/ErrorState';
 import { explanationFromBackend } from './services/apiError';
 import { readStoredThemeMode, storeThemeMode } from './utils/themeMode';
+import type { DebugItSession } from './types/api';
 import {
   ALL_SCALE_SETS,
   GITHUB_HOSTED_POOL,
@@ -31,10 +39,16 @@ import {
 } from './utils/scaleSets';
 import './App.css';
 
-function App() {
+// The 1.x dashboard: every 1.x hook lives here, so the whole-dashboard sign
+// in page mounts none of them.
+function Dashboard({
+  layout,
+  debugItSession,
+}: {
+  layout: LayoutProps;
+  debugItSession: Extract<DebugItSession, { state: 'signed-out' | 'signed-in' }> | null;
+}) {
   const [selectedScaleSet, setSelectedScaleSet] = useState<string>(ALL_SCALE_SETS);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(readStoredThemeMode);
-  const theme = useMemo(() => createAppTheme(themeMode), [themeMode]);
   const now = useNow(1000);
 
   const isUnknownFilter = selectedScaleSet === UNKNOWN_SCALE_SET;
@@ -50,6 +64,7 @@ function App() {
   const alertsQuery = useAlerts();
   const [alertSettingsOpen, setAlertSettingsOpen] = useState(false);
   const [alertsAnchor, setAlertsAnchor] = useState<HTMLElement | null>(null);
+  const [alertsPlacement, setAlertsPlacement] = useState<AlertsPlacement>('side');
   const activeAlerts = useMemo(() => alertsQuery.data?.alerts ?? [], [alertsQuery.data]);
 
   const allScaleSets = useMemo(() => scaleSetsQuery.data ?? [], [scaleSetsQuery.data]);
@@ -92,14 +107,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scaleSetsQuery.error, queueQuery.error, runningQuery.error, historyQuery.error],
   );
-
-  const handleThemeToggle = useCallback(() => {
-    setThemeMode((current) => {
-      const next: ThemeMode = current === 'dark' ? 'light' : 'dark';
-      storeThemeMode(next);
-      return next;
-    });
-  }, []);
 
   const handleRefresh = useCallback(async () => {
     await Promise.allSettled([
@@ -144,54 +151,17 @@ function App() {
   ]);
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <div className="App">
-        <AppBar position="static" color="default" elevation={1}>
-          <Container maxWidth="xl" disableGutters>
-            <Toolbar variant="dense">
-              <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
-                {APP_HEADING}
-              </Typography>
-              <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'flex-end', gap: 2 }}>
-                <Badge
-                  badgeContent={activeAlerts.length}
-                  color="error"
-                  overlap="rectangular"
-                >
-                  <Button
-                    variant="outlined"
-                    color="inherit"
-                    size="small"
-                    onClick={(event) => setAlertsAnchor(event.currentTarget)}
-                    aria-haspopup="dialog"
-                    aria-label={
-                      activeAlerts.length > 0
-                        ? `Alerts — ${activeAlerts.length} active`
-                        : 'Alerts'
-                    }
-                    sx={(theme) => ({
-                      textTransform: 'none',
-                      borderRadius: 999,
-                      minWidth: 0,
-                      px: 1.25,
-                      py: 0.375,
-                      fontSize: 13,
-                      fontWeight: 500,
-                      lineHeight: 1.3,
-                      letterSpacing: 0.1,
-                      borderColor: alpha(theme.palette.text.primary, 0.35),
-                    })}
-                  >
-                    Alerts
-                  </Button>
-                </Badge>
-                <ThemeToggle mode={themeMode} onToggle={handleThemeToggle} />
-              </Box>
-            </Toolbar>
-          </Container>
-        </AppBar>
-
+    <>
+      <AppLayout
+        {...layout}
+        alerts={{
+          count: activeAlerts.length,
+          onOpen: (anchor, placement) => {
+            setAlertsPlacement(placement);
+            setAlertsAnchor(anchor);
+          },
+        }}
+      >
         <Container component="main" maxWidth="xl" sx={{ mt: 3, mb: 6 }}>
           <Box
             role="status"
@@ -294,24 +264,133 @@ function App() {
                   updatedAt={historyQuery.dataUpdatedAt}
                   refreshSeconds={REFRESH_INTERVAL_MS / 1000}
                   showScaleSetColumn={showScaleSetColumn}
+                  debugItSession={debugItSession}
                 />
               </Box>
             </>
           )}
         </Container>
+      </AppLayout>
 
-        <AlertsPopover
-          anchorEl={alertsAnchor}
-          onClose={() => setAlertsAnchor(null)}
-          onOpenSettings={() => {
-            setAlertsAnchor(null);
-            setAlertSettingsOpen(true);
-          }}
-          alerts={activeAlerts}
-          now={now}
-        />
+      <AlertsPopover
+        anchorEl={alertsAnchor}
+        placement={alertsPlacement}
+        onClose={() => setAlertsAnchor(null)}
+        onOpenSettings={() => {
+          setAlertsAnchor(null);
+          setAlertSettingsOpen(true);
+        }}
+        alerts={activeAlerts}
+        now={now}
+      />
 
-        <AlertSettingsDialog open={alertSettingsOpen} onClose={() => setAlertSettingsOpen(false)} />
+      <AlertSettingsDialog open={alertSettingsOpen} onClose={() => setAlertSettingsOpen(false)} />
+    </>
+  );
+}
+
+function App() {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(readStoredThemeMode);
+  const theme = useMemo(() => createAppTheme(themeMode), [themeMode]);
+
+  const handleThemeToggle = useCallback(() => {
+    setThemeMode((current) => {
+      const next: ThemeMode = current === 'dark' ? 'light' : 'dark';
+      storeThemeMode(next);
+      return next;
+    });
+  }, []);
+
+  // Loading, errored with nothing known yet, or Debug it disabled: no
+  // account or page items in the panel and the 1.x dashboard exactly as before. After a failed
+  // refetch the last known answer stays in use.
+  const sessionQuery = useSession();
+  const session = sessionQuery.data;
+  const shownSession =
+    session && (session.state === 'signed-out' || session.state === 'signed-in') ? session : null;
+  const signOutMutation = useSignOut(shownSession?.loginScope ?? 'debug-it-only');
+  const signInOnly = shownSession?.state === 'signed-out' && shownSession.loginScope === 'whole-dashboard';
+  const administrator = shownSession?.state === 'signed-in' && shownSession.administrator;
+  // Personal key mode (story 5.2): allowed users save, replace and delete their own key.
+  const personalKeys = personalKeyMode(shownSession);
+  const [personalKeyOpen, setPersonalKeyOpen] = useState(false);
+  useEffect(() => {
+    if (!personalKeys) setPersonalKeyOpen(false);
+  }, [personalKeys]);
+
+  // No router: the settings page replaces the dashboard body while open and
+  // only while the session still says administrator. The security page does
+  // the same while Debug it is enabled and the dashboard is shown. Each view
+  // closes only when its own condition fails.
+  const [view, setView] = useState<'dashboard' | 'settings' | 'security'>('dashboard');
+  const settingsOpen = view === 'settings' && administrator;
+  const securityAvailable = shownSession !== null && !signInOnly;
+  const securityOpen = view === 'security' && securityAvailable;
+  useEffect(() => {
+    setView((current) =>
+      (current === 'settings' && !administrator) || (current === 'security' && !securityAvailable)
+        ? 'dashboard'
+        : current,
+    );
+  }, [administrator, securityAvailable]);
+
+  // Each view draws its own panel, so choosing an item mounts a new one: its
+  // current item takes the focus back. Back to dashboard does not.
+  const [focusCurrentItem, setFocusCurrentItem] = useState(false);
+  const openView = (next: typeof view) => {
+    setFocusCurrentItem(true);
+    setView(next);
+  };
+  const back = () => {
+    setFocusCurrentItem(false);
+    setView('dashboard');
+  };
+  const items: LayoutItem[] = [];
+  if (administrator || securityAvailable) {
+    items.push({ label: 'Dashboard', current: !settingsOpen && !securityOpen, onSelect: () => openView('dashboard') });
+  }
+  if (administrator) {
+    items.push({ label: 'Debug it settings', current: settingsOpen, onSelect: () => openView('settings') });
+  }
+  if (securityAvailable) {
+    items.push({ label: 'Security', current: securityOpen, onSelect: () => openView('security') });
+  }
+  const layout: LayoutProps = {
+    heading: APP_HEADING,
+    items,
+    focusCurrentItem,
+    account:
+      shownSession && !signInOnly
+        ? {
+            session: shownSession,
+            onSignOut: () => signOutMutation.mutate(),
+            signingOut: signOutMutation.isPending,
+            personalKey: personalKeys ? { onOpen: () => setPersonalKeyOpen(true) } : undefined,
+          }
+        : null,
+    themeToggle: <ThemeToggle mode={themeMode} onToggle={handleThemeToggle} />,
+  };
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <div className="App">
+        {signInOnly ? (
+          <AppLayout {...layout}>
+            <SignInPage />
+          </AppLayout>
+        ) : settingsOpen ? (
+          <AppLayout {...layout}>
+            <DebugItSettingsPage onBack={back} />
+          </AppLayout>
+        ) : securityOpen ? (
+          <AppLayout {...layout}>
+            <SecurityPage onBack={back} />
+          </AppLayout>
+        ) : (
+          <Dashboard layout={layout} debugItSession={shownSession} />
+        )}
+        {personalKeys && <PersonalKeyDialog open={personalKeyOpen} onClose={() => setPersonalKeyOpen(false)} />}
       </div>
     </ThemeProvider>
   );

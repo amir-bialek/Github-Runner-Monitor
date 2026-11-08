@@ -310,6 +310,7 @@ export function toJobHistoryItem(
     durationMs,
     htmlUrl: job.html_url,
     runUrl: runContext.runUrl,
+    target: { kind: 'job', id: job.id },
   };
 }
 

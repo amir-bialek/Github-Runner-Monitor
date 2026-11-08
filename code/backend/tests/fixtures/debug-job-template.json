@@ -1,0 +1,269 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "labels": {
+      "app.kubernetes.io/name": "debug-it-job",
+      "app.kubernetes.io/part-of": "github-runner-monitor"
+    },
+    "name": "debug-it-run",
+    "namespace": "debug-it"
+  },
+  "spec": {
+    "activeDeadlineSeconds": 0,
+    "backoffLimit": 0,
+    "template": {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/name": "debug-it-job",
+          "app.kubernetes.io/part-of": "github-runner-monitor"
+        }
+      },
+      "spec": {
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "command": [
+              "node",
+              "/app/src/wrapper.ts"
+            ],
+            "env": [
+              {
+                "name": "RUN_ID",
+                "value": ""
+              },
+              {
+                "name": "DEADLINE_AT",
+                "value": ""
+              },
+              {
+                "name": "SPEND_LIMIT_USD",
+                "value": ""
+              },
+              {
+                "name": "RESULTS_URL",
+                "value": "http://backend.default.svc.cluster.local:3002"
+              },
+              {
+                "name": "WORK_DIR",
+                "value": "/work"
+              },
+              {
+                "name": "STATE_DIR",
+                "value": "/wrapper"
+              },
+              {
+                "name": "KEY_HELPER_PORT",
+                "value": "8081"
+              },
+              {
+                "name": "BACKEND_MAIN_PORT",
+                "value": "3001"
+              }
+            ],
+            "image": "acme/debug-job",
+            "name": "claude",
+            "resources": {
+              "limits": {
+                "memory": "2Gi"
+              },
+              "requests": {
+                "cpu": "250m",
+                "memory": "512Mi"
+              }
+            },
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              },
+              "readOnlyRootFilesystem": true,
+              "runAsNonRoot": true
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/work",
+                "name": "work"
+              },
+              {
+                "mountPath": "/wrapper",
+                "name": "wrapper"
+              },
+              {
+                "mountPath": "/secrets/result",
+                "name": "result-code",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "enableServiceLinks": false,
+        "initContainers": [
+          {
+            "command": [
+              "node",
+              "/app/src/receiver.ts"
+            ],
+            "env": [
+              {
+                "name": "WORK_DIR",
+                "value": "/work"
+              },
+              {
+                "name": "UPLOAD_PORT",
+                "value": "8080"
+              }
+            ],
+            "image": "acme/debug-job",
+            "name": "receiver",
+            "ports": [
+              {
+                "containerPort": 8080,
+                "name": "upload",
+                "protocol": "TCP"
+              }
+            ],
+            "resources": {
+              "limits": {
+                "memory": "256Mi"
+              },
+              "requests": {
+                "cpu": "50m",
+                "memory": "64Mi"
+              }
+            },
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              },
+              "readOnlyRootFilesystem": true,
+              "runAsNonRoot": true
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/work",
+                "name": "work"
+              },
+              {
+                "mountPath": "/secrets/upload",
+                "name": "upload-code",
+                "readOnly": true
+              }
+            ]
+          },
+          {
+            "command": [
+              "node",
+              "/app/src/keyHelper.ts"
+            ],
+            "env": [
+              {
+                "name": "KEY_HELPER_PORT",
+                "value": "8081"
+              }
+            ],
+            "image": "acme/debug-job",
+            "name": "key-helper",
+            "resources": {
+              "limits": {
+                "memory": "256Mi"
+              },
+              "requests": {
+                "cpu": "50m",
+                "memory": "64Mi"
+              }
+            },
+            "restartPolicy": "Always",
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              },
+              "readOnlyRootFilesystem": true,
+              "runAsNonRoot": true
+            },
+            "volumeMounts": [
+              {
+                "mountPath": "/secrets/anthropic",
+                "name": "anthropic-key",
+                "readOnly": true
+              }
+            ]
+          }
+        ],
+        "restartPolicy": "Never",
+        "securityContext": {
+          "fsGroup": 1000,
+          "runAsGroup": 1000,
+          "runAsNonRoot": true,
+          "runAsUser": 1000,
+          "seccompProfile": {
+            "type": "RuntimeDefault"
+          }
+        },
+        "shareProcessNamespace": false,
+        "volumes": [
+          {
+            "emptyDir": {
+              "sizeLimit": "768Mi"
+            },
+            "name": "work"
+          },
+          {
+            "emptyDir": {
+              "sizeLimit": "768Mi"
+            },
+            "name": "wrapper"
+          },
+          {
+            "name": "anthropic-key",
+            "secret": {
+              "defaultMode": 288,
+              "items": [
+                {
+                  "key": "anthropic-api-key",
+                  "path": "api-key"
+                }
+              ],
+              "secretName": ""
+            }
+          },
+          {
+            "name": "upload-code",
+            "secret": {
+              "defaultMode": 288,
+              "items": [
+                {
+                  "key": "upload-code",
+                  "path": "upload-code"
+                }
+              ],
+              "secretName": ""
+            }
+          },
+          {
+            "name": "result-code",
+            "secret": {
+              "defaultMode": 288,
+              "items": [
+                {
+                  "key": "result-code",
+                  "path": "result-code"
+                }
+              ],
+              "secretName": ""
+            }
+          }
+        ]
+      }
+    },
+    "ttlSecondsAfterFinished": 300
+  }
+}

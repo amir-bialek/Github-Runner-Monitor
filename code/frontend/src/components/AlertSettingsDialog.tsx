@@ -17,7 +17,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useAlertSettings, useAlertSettingsMutations } from '../hooks/useAlertSettings';
-import type { AlertSettingsResponse, AlertSettingsUpdate } from '../types/api';
+import { useSession } from '../hooks/useSession';
+import type { AlertSettingsResponse, AlertSettingsUpdate, DebugItSession } from '../types/api';
 import { formatShortDateTime, parseTimestamp } from '../utils/format';
 
 interface AlertSettingsDialogProps {
@@ -74,6 +75,14 @@ function buildUpdate(draft: Draft): AlertSettingsUpdate {
   return update;
 }
 
+// FR45: with Debug it on, only an administrator may change alert settings.
+// Disabled, loading or errored with no data: not restricted (1.x behavior).
+function isRestricted(session: DebugItSession | undefined): boolean {
+  if (!session) return false;
+  if (session.state === 'signed-out') return true;
+  return session.state === 'signed-in' && !session.administrator;
+}
+
 function errorText(error: unknown): string {
   return (error as Error | null)?.message ?? 'Something went wrong';
 }
@@ -120,6 +129,7 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
   const query = useAlertSettings(open);
   const { save, reset, test } = useAlertSettingsMutations();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const restricted = isRestricted(useSession().data);
 
   useEffect(() => {
     if (open && query.data && !draft) setDraft(draftFrom(query.data));
@@ -137,6 +147,7 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
 
   const data = query.data;
   const locked = data ? !data.editable : true;
+  const readOnly = locked || restricted;
   const busy = save.isPending || reset.isPending;
 
   const invalid = useMemo(() => {
@@ -149,7 +160,7 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
   }, [draft]);
 
   const handleSave = () => {
-    if (!draft || invalid) return;
+    if (!draft || invalid || restricted) return;
     save.mutate(buildUpdate(draft), { onSuccess: onClose });
   };
 
@@ -172,6 +183,7 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
           )
         ) : (
           <Stack spacing={3}>
+            {restricted && <Alert severity="info">Only Debug it administrators can change alert settings.</Alert>}
             {locked && (
               <Alert severity="info">
                 These settings are fixed by the deployment (ALERT_SETTINGS_EDITABLE=false) and cannot be changed here.
@@ -184,7 +196,7 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
               enabled={draft.queueEnabled}
               minutes={draft.queueMinutes}
               deploymentMinutes={data.deploymentDefaults.queueWait.thresholdMinutes}
-              disabled={locked}
+              disabled={readOnly}
               onEnabled={(queueEnabled) => setDraft({ ...draft, queueEnabled })}
               onMinutes={(queueMinutes) => setDraft({ ...draft, queueMinutes })}
             />
@@ -195,7 +207,7 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
               enabled={draft.offlineEnabled}
               minutes={draft.offlineMinutes}
               deploymentMinutes={data.deploymentDefaults.runnerGroupOffline.thresholdMinutes}
-              disabled={locked}
+              disabled={readOnly}
               onEnabled={(offlineEnabled) => setDraft({ ...draft, offlineEnabled })}
               onMinutes={(offlineMinutes) => setDraft({ ...draft, offlineMinutes })}
             />
@@ -215,40 +227,44 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
                 </Typography>
               )}
 
-              <TextField
-                label={data.settings.webhookConfigured ? 'Replace webhook URL' : 'Webhook URL'}
-                placeholder="https://hooks.example.com/…"
-                size="small"
-                fullWidth
-                value={draft.webhookUrl}
-                onChange={(event) => setDraft({ ...draft, webhookUrl: event.target.value, removeWebhook: false })}
-                disabled={locked}
-                error={Boolean(urlError(draft.webhookUrl))}
-                helperText={urlError(draft.webhookUrl) ?? 'Leave empty to keep the current setting.'}
-              />
+              {!restricted && (
+                <TextField
+                  label={data.settings.webhookConfigured ? 'Replace webhook URL' : 'Webhook URL'}
+                  placeholder="https://hooks.example.com/…"
+                  size="small"
+                  fullWidth
+                  value={draft.webhookUrl}
+                  onChange={(event) => setDraft({ ...draft, webhookUrl: event.target.value, removeWebhook: false })}
+                  disabled={locked}
+                  error={Boolean(urlError(draft.webhookUrl))}
+                  helperText={urlError(draft.webhookUrl) ?? 'Leave empty to keep the current setting.'}
+                />
+              )}
 
-              <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-                {data.settings.webhookConfigured && (
-                  <Button
-                    size="small"
-                    color="inherit"
-                    disabled={locked}
-                    onClick={() => setDraft({ ...draft, removeWebhook: !draft.removeWebhook, webhookUrl: '' })}
-                  >
-                    {draft.removeWebhook ? 'Keep webhook' : 'Remove webhook'}
-                  </Button>
-                )}
-                {data.settings.webhookConfigured && (
-                  <Button size="small" disabled={locked || test.isPending} onClick={() => test.mutate()}>
-                    Send test
-                  </Button>
-                )}
-                {draft.removeWebhook && (
-                  <Typography variant="body2" color="warning.main">
-                    The webhook will be removed when you save — on-screen only.
-                  </Typography>
-                )}
-              </Stack>
+              {!restricted && (
+                <Stack direction="row" spacing={1} sx={{ mt: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {data.settings.webhookConfigured && (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      disabled={locked}
+                      onClick={() => setDraft({ ...draft, removeWebhook: !draft.removeWebhook, webhookUrl: '' })}
+                    >
+                      {draft.removeWebhook ? 'Keep webhook' : 'Remove webhook'}
+                    </Button>
+                  )}
+                  {data.settings.webhookConfigured && (
+                    <Button size="small" disabled={locked || test.isPending} onClick={() => test.mutate()}>
+                      Send test
+                    </Button>
+                  )}
+                  {draft.removeWebhook && (
+                    <Typography variant="body2" color="warning.main">
+                      The webhook will be removed when you save — on-screen only.
+                    </Typography>
+                  )}
+                </Stack>
+              )}
 
               {test.isSuccess && !test.data.lastError && (
                 <Alert severity="success" sx={{ mt: 1.5 }}>
@@ -289,17 +305,19 @@ const AlertSettingsDialog: React.FC<AlertSettingsDialogProps> = ({ open, onClose
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 1.5 }}>
-        {data?.source === 'ui' && !locked && (
+        {data?.source === 'ui' && !locked && !restricted && (
           <Button color="inherit" disabled={busy} onClick={() => reset.mutate(undefined, { onSuccess: (fresh) => setDraft(draftFrom(fresh)) })} sx={{ mr: 'auto' }}>
             Reset to deployment values
           </Button>
         )}
         <Button color="inherit" onClick={onClose}>
-          Cancel
+          {restricted ? 'Close' : 'Cancel'}
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={locked || invalid || busy}>
-          Save
-        </Button>
+        {!restricted && (
+          <Button variant="contained" onClick={handleSave} disabled={locked || invalid || busy}>
+            Save
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

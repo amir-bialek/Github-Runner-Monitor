@@ -1,0 +1,80 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "labels": {
+      "app.kubernetes.io/name": "debug-it-job",
+      "app.kubernetes.io/part-of": "github-runner-monitor",
+      "debug-it/check": "true"
+    },
+    "name": "debug-it-check",
+    "namespace": "debug-it"
+  },
+  "spec": {
+    "activeDeadlineSeconds": 120,
+    "backoffLimit": 0,
+    "template": {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/name": "debug-it-job",
+          "app.kubernetes.io/part-of": "github-runner-monitor",
+          "debug-it/check": "true"
+        }
+      },
+      "spec": {
+        "automountServiceAccountToken": false,
+        "containers": [
+          {
+            "command": [
+              "node",
+              "/app/src/isolationCheck.ts"
+            ],
+            "env": [
+              {
+                "name": "RESULTS_URL",
+                "value": "http://backend.default.svc.cluster.local:3002"
+              },
+              {
+                "name": "BACKEND_MAIN_PORT",
+                "value": "3001"
+              }
+            ],
+            "image": "acme/debug-job",
+            "name": "isolation-check",
+            "resources": {
+              "limits": {
+                "memory": "256Mi"
+              },
+              "requests": {
+                "cpu": "50m",
+                "memory": "64Mi"
+              }
+            },
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ]
+              },
+              "readOnlyRootFilesystem": true,
+              "runAsNonRoot": true
+            }
+          }
+        ],
+        "enableServiceLinks": false,
+        "restartPolicy": "Never",
+        "securityContext": {
+          "fsGroup": 1000,
+          "runAsGroup": 1000,
+          "runAsNonRoot": true,
+          "runAsUser": 1000,
+          "seccompProfile": {
+            "type": "RuntimeDefault"
+          }
+        }
+      }
+    },
+    "ttlSecondsAfterFinished": 300
+  }
+}

@@ -1,0 +1,11 @@
+# Story 7.2: one canary per repository config item of the repo-config scenario
+# (name=value). Invented; a hit in what Claude Code sends proves the item was loaded.
+hook=ACME-CANARY-HOOK-4F1A
+settings=ACME-CANARY-SETTINGS-7B2C
+env=ACME-CANARY-ENV-9D3E
+mcp=ACME-CANARY-MCP-2A5F
+claudemd=ACME-CANARY-CLAUDEMD-6C8B
+agents=ACME-CANARY-AGENTS-1E7D
+commands=ACME-CANARY-COMMANDS-8F4A
+skills=ACME-CANARY-SKILLS-3B9C
+plugin=ACME-CANARY-PLUGIN-5D2E

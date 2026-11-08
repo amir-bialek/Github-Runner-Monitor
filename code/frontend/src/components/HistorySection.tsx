@@ -9,7 +9,7 @@ import {
   TableHead,
   TableRow,
 } from '@mui/material';
-import { HistoryJob } from '../types/api';
+import { DebugItSession, HistoryJob, HistoryTarget } from '../types/api';
 import {
   formatCompactDuration,
   formatDateThenTime,
@@ -31,6 +31,7 @@ import SortableHeadCell from './SortableHeadCell';
 import StatusBadge, { resultLabel } from './StatusBadge';
 import TableSkeleton from './TableSkeleton';
 import TablePager, { usePage } from './TablePager';
+import { useDebugItColumn } from './DebugItAction';
 
 interface HistorySectionProps {
   filterKey: string;
@@ -43,6 +44,8 @@ interface HistorySectionProps {
   updatedAt: number;
   refreshSeconds: number;
   showScaleSetColumn: boolean;
+  /** The shown Debug it session, or null when Debug it is off or the session is loading. */
+  debugItSession?: Extract<DebugItSession, { state: 'signed-out' | 'signed-in' }> | null;
 }
 
 export const HISTORY_ROWS_PER_PAGE = HISTORY_PAGE_SIZE;
@@ -80,6 +83,18 @@ function historySortValue(job: HistoryJob, column: HistoryColumn): SortValue {
   }
 }
 
+// An older backend (during a rolling upgrade) sends no target: treat it as a job.
+function targetOf(job: HistoryJob): HistoryTarget {
+  return { kind: job.target?.kind ?? 'job', id: job.target?.id ?? job.id };
+}
+
+function historyLinkLabel(job: HistoryJob): string {
+  if (targetOf(job).kind === 'run') {
+    return `Workflow run ${job.name} in ${job.repository}, ${resultLabel(job.result)}, no jobs started`;
+  }
+  return `Job ${job.name} in ${job.repository}, ${resultLabel(job.result)}`;
+}
+
 function historyDefaultDirection(column: HistoryColumn) {
   return column === 'finishedAt' || column === 'duration' ? ('desc' as const) : ('asc' as const);
 }
@@ -95,7 +110,9 @@ const HistorySection: React.FC<HistorySectionProps> = ({
   updatedAt,
   refreshSeconds,
   showScaleSetColumn,
+  debugItSession = null,
 }) => {
+  const debugIt = useDebugItColumn(debugItSession);
   const { sort, toggle } = useTableSort<HistoryColumn>(
     { column: 'finishedAt', direction: 'desc' },
     historyDefaultDirection,
@@ -164,17 +181,18 @@ const HistorySection: React.FC<HistorySectionProps> = ({
                     sx={{ whiteSpace: 'nowrap' }}
                   />
                   <SortableHeadCell column="result" label="Result" sort={effectiveSort} onSort={toggle} />
+                  {debugIt.showColumn && <TableCell sx={{ whiteSpace: 'nowrap' }}>Debug it</TableCell>}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {visible.map((job) => {
                   const completedAt = parseTimestamp(job.completedAt);
                   return (
-                    <TableRow key={job.id} hover>
+                    <TableRow key={`${targetOf(job).kind}:${targetOf(job).id}`} hover>
                       <TableCell>
                         <ExternalLink
                           href={job.htmlUrl}
-                          label={`Job ${job.name} in ${job.repository}, ${resultLabel(job.result)}`}
+                          label={historyLinkLabel(job)}
                         >
                           {job.name}
                         </ExternalLink>
@@ -206,6 +224,7 @@ const HistorySection: React.FC<HistorySectionProps> = ({
                       <TableCell>
                         <StatusBadge result={job.result} />
                       </TableCell>
+                      {debugIt.showColumn && <TableCell>{debugIt.renderCell(job, targetOf(job))}</TableCell>}
                     </TableRow>
                   );
                 })}
@@ -225,6 +244,8 @@ const HistorySection: React.FC<HistorySectionProps> = ({
           />
         </>
       )}
+
+      {debugIt.dialog}
     </Box>
   );
 };

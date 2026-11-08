@@ -1,0 +1,94 @@
+name: Attack test cluster
+description: >
+  Story 7.1/7.2: sets up Node.js and Helm, installs kind and kubectl (pinned,
+  checksums verified), builds the backend and Debug Job images, creates the
+  kind cluster of helm/tests/attack/kind-config.yaml, installs Calico (so
+  NetworkPolicies are enforced) and loads the images. Story 7.4: with input
+  frontend true it also builds frontend:attack-test from
+  docker/Dockerfile.frontend and loads it. Used by the isolation, agent and
+  leak jobs of .github/workflows/attack-tests.yml; the caller checks out the
+  code first and deletes the cluster (kind delete cluster --name attack-test).
+
+inputs:
+  frontend:
+    description: 'Also build and load the frontend image (frontend:attack-test), for the leak job'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: v3.17.3
+
+    - name: Install kind and kubectl
+      shell: bash
+      env:
+        KIND_VERSION: v0.27.0
+        KIND_SHA256: a6875aaea358acf0ac07786b1a6755d08fd640f4c79b7a2e46681cc13f49a04b
+        KUBECTL_VERSION: v1.32.3
+        KUBECTL_SHA256: ab209d0c5134b61486a0486585604a616a5bb2fc07df46d304b3c95817b2d79f
+      run: |
+        set -euo pipefail
+        curl -sSfL -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+        echo "${KIND_SHA256}  kind" | sha256sum -c -
+        curl -sSfL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+        echo "${KUBECTL_SHA256}  kubectl" | sha256sum -c -
+        chmod +x kind kubectl
+        sudo mv kind kubectl /usr/local/bin/
+        kind version
+        kubectl version --client
+
+    - name: Build the backend and Debug Job images
+      shell: bash
+      run: |
+        docker build -f docker/Dockerfile.backend -t backend:attack-test .
+        docker build -t debug-job:attack-test code/debug-job
+
+    - name: Build the frontend image
+      if: inputs.frontend == 'true'
+      shell: bash
+      run: docker build -f docker/Dockerfile.frontend -t frontend:attack-test .
+
+    - name: Create the kind cluster
+      shell: bash
+      env:
+        KIND_NODE_IMAGE: kindest/node:v1.32.2@sha256:142f543559cc55d64e1ab9341df08e5ced84bd2e893736da8f51320f26f5950b
+      run: kind create cluster --config helm/tests/attack/kind-config.yaml --image "${KIND_NODE_IMAGE}" --wait 0s
+
+    - name: Install Calico
+      shell: bash
+      env:
+        CALICO_VERSION: v3.29.3
+        CALICO_SHA256: 9a575859428b822a224dedafc4238555b6b0f910f2abf12983f20f871860914e
+      run: |
+        set -euo pipefail
+        curl -sSfL -o calico.yaml \
+          "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
+        echo "${CALICO_SHA256}  calico.yaml" | sha256sum -c -
+        kubectl apply -f calico.yaml
+        # Ubuntu runners use loose reverse path filtering, which Felix
+        # otherwise refuses; it has no effect on NetworkPolicy enforcement.
+        kubectl -n kube-system set env daemonset/calico-node FELIX_IGNORELOOSERPF=true
+        kubectl -n kube-system rollout status daemonset/calico-node --timeout=300s
+        kubectl -n kube-system rollout status deployment/calico-kube-controllers --timeout=300s
+        kubectl wait --for=condition=Ready nodes --all --timeout=300s
+        kubectl -n kube-system rollout status deployment/coredns --timeout=300s
+
+    - name: Load the images into kind
+      shell: bash
+      run: |
+        kind load docker-image backend:attack-test --name attack-test
+        kind load docker-image debug-job:attack-test --name attack-test
+
+    - name: Load the frontend image into kind
+      if: inputs.frontend == 'true'
+      shell: bash
+      run: kind load docker-image frontend:attack-test --name attack-test

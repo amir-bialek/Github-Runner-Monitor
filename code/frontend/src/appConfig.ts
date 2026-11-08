@@ -18,3 +18,7 @@ export const QUEUE_PAGE_SIZE = positiveNumber(config?.queuePageSize, 10);
 export const QUEUE_MAX_ITEMS = positiveNumber(config?.queueMaxItems, 200);
 export const RUNNING_PAGE_SIZE = positiveNumber(config?.runningPageSize, 10);
 export const RUNNERS_REFRESH_MS = positiveNumber(config?.runnersRefreshSeconds, 30) * 1000;
+// The security design document on GitHub, linked from the Security page. It
+// is the repository's own origin; change it if the published repository differs.
+export const SECURITY_DOC_URL =
+  'https://github.com/amir-bialek/Github-Runner-Monitor-PRIVATE/blob/main/docs/security-design.md';

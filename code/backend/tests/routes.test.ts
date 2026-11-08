@@ -207,7 +207,7 @@ describe('GET /jobs/history', () => {
   test('returns finished jobs with a result, duration, repo and GitHub link', async () => {
     const response = await request(app).get('/jobs/history').expect(200);
 
-    expect(response.body.length).toBe(11);
+    expect(response.body.length).toBe(12);
     for (const job of response.body) {
       expect(['success', 'failure', 'cancelled', 'timed_out', 'other']).toContain(job.result);
       expect(job.repository).toMatch(/^acme\//);

@@ -11,7 +11,22 @@ interface AlertsPopoverProps {
   onOpenSettings: () => void;
   alerts: MonitorAlert[];
   now: number;
+  /** side: to the right of the panel item; below: under the narrow window's menu button. */
+  placement?: 'side' | 'below';
 }
+
+export const PLACEMENTS = {
+  side: {
+    anchorOrigin: { vertical: 'top', horizontal: 'right' },
+    transformOrigin: { vertical: 'top', horizontal: 'left' },
+    paperSx: { ml: 1 },
+  },
+  below: {
+    anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+    transformOrigin: { vertical: 'top', horizontal: 'left' },
+    paperSx: { mt: 1 },
+  },
+} as const;
 
 const LINES_PER_PAGE = 10;
 
@@ -70,7 +85,15 @@ function linesFor(alerts: MonitorAlert[], now: number): AlertLine[] {
   return lines;
 }
 
-const AlertsPopover: React.FC<AlertsPopoverProps> = ({ anchorEl, onClose, onOpenSettings, alerts, now }) => {
+const AlertsPopover: React.FC<AlertsPopoverProps> = ({
+  anchorEl,
+  onClose,
+  onOpenSettings,
+  alerts,
+  now,
+  placement = 'side',
+}) => {
+  const { anchorOrigin, transformOrigin, paperSx } = PLACEMENTS[placement];
   const lines = useMemo(() => linesFor(alerts, now), [alerts, now]);
   const { visible, page, setPage, showAll, setShowAll } = usePage(lines, LINES_PER_PAGE, anchorEl);
 
@@ -79,9 +102,9 @@ const AlertsPopover: React.FC<AlertsPopoverProps> = ({ anchorEl, onClose, onOpen
       open={Boolean(anchorEl)}
       anchorEl={anchorEl}
       onClose={onClose}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      slotProps={{ paper: { sx: { mt: 1, width: 440, maxWidth: 'calc(100vw - 32px)' } } }}
+      anchorOrigin={anchorOrigin}
+      transformOrigin={transformOrigin}
+      slotProps={{ paper: { sx: { ...paperSx, width: 440, maxWidth: 'calc(100vw - 32px)' } } }}
     >
       <Box component="section" aria-labelledby="alerts-heading" sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>

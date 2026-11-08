@@ -9,7 +9,9 @@ deployment:
   labels:
     app: github-runner-monitor-backend
   image:
-    # Replace with the published image, e.g. <dockerhub-account>/github-runner-monitor-backend
+    # Replace with the published image, e.g. bialekamir/github-runner-monitor.
+    # That repository has no plain latest tag: with it, set tag to
+    # backend-vX.Y.Z (or backend-latest).
     name: ""
     tag: latest
   resources:
@@ -94,3 +96,111 @@ service:
       protocol: TCP
       port: 3001
       targetPort: 3001
+
+# Debug it: lets a signed in user ask Claude why a failed GitHub Actions job
+# failed. Off by default; with enabled false (or this block removed) the chart
+# renders exactly what 1.x rendered. These values belong to the backend
+# release only; a debugIt block in the frontend release renders nothing.
+#
+# Turning it on also needs, or rendering fails naming what is missing:
+#   - deployment.env.regular.JOB_STATE_S3_BUCKET above (records live in S3)
+#   - the GITHUB_WEBHOOK_SECRET entry under deployment.env.fromSecrets above
+#   - deployment.autoscaling off: Debug it runs exactly one backend pod
+#     (replicas 1, strategy Recreate)
+#
+# Secrets are never written here, only references to Kubernetes Secrets you
+# create yourself. A plain string where a Secret reference belongs fails.
+debugIt:
+  enabled: false
+  # organization: one Anthropic API key for everyone (anthropicApiKeySecret).
+  # personal: each user brings their own key; anthropicApiKeySecret optional.
+  credentialsMode: organization
+  # Debug it runs per user per month with the organization key.
+  monthlyCap: 5
+  # debug-it-only: the 1.x dashboard stays open, only Debug it needs sign in.
+  # whole-dashboard: every page except /health and the webhook needs sign in.
+  loginScope: debug-it-only
+  # GitHub numeric user IDs (not logins, which can be renamed), e.g.
+  # 1000001. At least one is required when enabled.
+  administrators: []
+  # Starting lists; administrators change them later in the UI.
+  # Repositories as owner/name, e.g. acme/payments-api; users as GitHub
+  # numeric user IDs.
+  allowedRepositories: []
+  allowedUsers: []
+  # The address users open the dashboard on, e.g. https://runner-monitor.acme.example
+  # Required when enabled; sign in returns here.
+  publicUrl: ""
+  # The Debug it GitHub App (separate from GITHUB_TOKEN above).
+  githubApp:
+    appId: ""
+    clientId: ""
+    # Secret holding the App's private key (PEM).
+    privateKeySecret:
+      name: ""
+      key: ""
+    # Secret holding the App's OAuth client secret.
+    clientSecretSecret:
+      name: ""
+      key: ""
+  # Secret holding two 32 byte keys, personalKeyEncryptionKey and
+  # sessionEncryptionKey. Required when enabled.
+  encryptionSecret:
+    name: ""
+  # Secret holding the organization Anthropic API key. Required in
+  # organization mode.
+  anthropicApiKeySecret:
+    name: ""
+    key: ""
+  # Namespace the Debug Jobs run in. Create it yourself first; the chart
+  # renders the backend's Role, RoleBinding and a NetworkPolicy into it.
+  debugNamespace: debug-it
+  # The Debug Job image (code/debug-job). repository is required when
+  # enabled, without a tag, e.g. bialekamir/github-runner-monitor.
+  jobImage:
+    repository: ""
+    # empty = debug-job-v<chart appVersion>, the Debug Job image of the same
+    # release as the backend. Quote a numeric tag ("1.10"), or YAML reads it
+    # as a number (1.1).
+    tag: ""
+  # Port the Debug Job posts its result to on the backend Service.
+  resultsPort: 3002
+  # Network rules around the Debug Job and the backend. Check these match
+  # your cluster: Debug Jobs reach only Anthropic, cluster DNS and the
+  # backend results port; the backend main port (3001) is reachable only from
+  # the frontend pods and the ingress controller pods.
+  network:
+    # Anthropic API addresses (https://docs.anthropic.com/en/api/ip-addresses).
+    anthropicCidrs:
+    - 160.79.104.0/23
+    - "2607:6bc0::/48"
+    # Where the cluster DNS pods run, and their labels.
+    dnsNamespace: kube-system
+    dnsPodLabels:
+      k8s-app: kube-dns
+    # Labels of the frontend pods (in this release's namespace).
+    frontendPodLabels:
+      app: github-runner-monitor-frontend
+    # Where the ingress controller pods run, and their labels.
+    ingressControllerNamespace: ingress-nginx
+    ingressControllerPodLabels:
+      app.kubernetes.io/name: ingress-nginx
+  limits:
+    maxConcurrentRuns: 3
+    maxRunsPerUser: 1
+    timeLimitMinutes: 15
+    spendLimitUsd: 2
+    logLimitBytes: 2097152
+    patchLimitBytes: 102400
+    # 0 means no organization spend limit.
+    organizationMonthlySpendLimitUsd: 0
+  # Story 6.1: report each finished debug run's cost and tokens to the OTLP
+  # collector of the claude-code-reviewer-cost Grafana dashboard (see the
+  # README, "Cost telemetry"). The backend POSTs to {endpoint}/v1/metrics,
+  # for example http://otel-collector.monitoring:4318. The collector key, if
+  # the collector needs one, only as a Secret reference { name, key }; it is
+  # sent as the x-api-key header.
+  costTelemetry:
+    enabled: false
+    endpoint: ""
+    apiKeySecret: {}

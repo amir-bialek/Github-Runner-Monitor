@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "explanation": "The test step failed because payments-api reads PAYMENTS_TIMEOUT as a number but the workflow sets it to \"30s\". The patch changes the workflow value to 30.",
+  "causeLocation": { "kind": "this-repository" },
+  "patch": "diff --git a/payments-api/.github/workflows/ci.yml b/payments-api/.github/workflows/ci.yml\n--- a/payments-api/.github/workflows/ci.yml\n+++ b/payments-api/.github/workflows/ci.yml\n@@ -12,7 +12,7 @@ jobs:\n     env:\n-      PAYMENTS_TIMEOUT: 30s\n+      PAYMENTS_TIMEOUT: 30\n     steps:\n",
+  "costUsd": 0.42,
+  "inputTokens": 48210,
+  "outputTokens": 1830,
+  "durationMs": 95400,
+  "logTruncated": false,
+  "failureReason": "none"
+}

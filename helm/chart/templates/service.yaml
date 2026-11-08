@@ -40,6 +40,12 @@ spec:
       nodePort: {{ $port.nodePort }}
       {{- end }}
   {{- end }}
+  {{- if and (eq (include "debugIt.active" $) "true") (hasKey . "selectDeployment") (.selectDeployment) ($top.deployment.enabled) }}
+    - name: results
+      port: {{ include "debugIt.resultsPort" $ }}
+      targetPort: {{ include "debugIt.resultsPort" $ }}
+      protocol: TCP
+  {{- end }}
   {{- if and ( .enableProbePort ) (hasKey $top.deployment "readiness") (hasKey $top.deployment.readiness "openServicePort") ($top.deployment.readiness.openServicePort) }}
     - name: readiness-port
       port: {{ $top.deployment.readiness.probePort }}

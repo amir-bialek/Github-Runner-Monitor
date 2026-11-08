@@ -1,13 +1,16 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { LRUCache } from 'lru-cache';
-import { upsert } from '../services/jobStore.ts';
+import { GitHubClient } from '../services/githubClient.ts';
+import { isKeepableFailedRun, keepFailedRun, upsert } from '../services/jobStore.ts';
 import { noteRun } from '../services/runContextStore.ts';
-import type { WorkflowJobEvent } from '../types/webhook.ts';
+import type { WorkflowJobEvent, WorkflowRunEvent } from '../types/webhook.ts';
 
 export const WEBHOOK_PATH = '/webhooks/github';
 
 const BODY_LIMIT = process.env.WEBHOOK_BODY_LIMIT || '5mb';
+
+const pendingRunChecks = new Set<Promise<void>>();
 
 const seenDeliveries = new LRUCache<string, true>({
   max: parseInt(process.env.WEBHOOK_DEDUPE_SIZE || '5000'),
@@ -60,7 +63,7 @@ export function createWebhookRouter(): express.Router {
         return;
       }
 
-      if (eventName !== 'workflow_job') {
+      if (eventName !== 'workflow_job' && eventName !== 'workflow_run') {
         res.status(200).json({ ok: true, ignored: eventName ?? 'unknown' });
         return;
       }
@@ -71,15 +74,24 @@ export function createWebhookRouter(): express.Router {
         return;
       }
 
-      let event: WorkflowJobEvent;
+      let parsed: unknown;
       try {
-        event = JSON.parse(raw.toString('utf8')) as WorkflowJobEvent;
+        parsed = JSON.parse(raw.toString('utf8'));
       } catch {
         console.error('[ERROR] Webhook delivery had a valid signature but an unreadable body');
         res.status(200).json({ ok: false, error: 'Unreadable body' });
         return;
       }
 
+      if (eventName === 'workflow_run') {
+        if (deliveryId) {
+          seenDeliveries.set(deliveryId, true);
+        }
+        handleWorkflowRun(parsed as WorkflowRunEvent, res);
+        return;
+      }
+
+      const event = parsed as WorkflowJobEvent;
       const applied = upsert(event);
 
       if (deliveryId) {
@@ -98,6 +110,45 @@ export function createWebhookRouter(): express.Router {
   );
 
   return router;
+}
+
+function handleWorkflowRun(event: WorkflowRunEvent, res: express.Response): void {
+  if (!isKeepableFailedRun(event)) {
+    res.status(200).json({ ok: true, applied: false });
+    return;
+  }
+
+  const token = process.env.GITHUB_TOKEN;
+  const [owner, repo] = event.repository.full_name.split('/');
+  if (!token || !owner || !repo) {
+    res.status(200).json({ ok: true, applied: keepFailedRun(event) });
+    return;
+  }
+
+  // The jobs API decides; it is asked after the reply so GitHub never waits on it.
+  res.status(200).json({ ok: true, applied: false, checking: true });
+
+  const check = checkRunHasNoJobs(event, owner, repo, token);
+  pendingRunChecks.add(check);
+  void check.finally(() => pendingRunChecks.delete(check));
+}
+
+async function checkRunHasNoJobs(event: WorkflowRunEvent, owner: string, repo: string, token: string): Promise<void> {
+  const runId = event.workflow_run.id;
+  try {
+    const result = await new GitHubClient(token).getJobsForRun(owner, repo, runId);
+    if (result.total_count > 0 || result.jobs.length > 0) return;
+  } catch {
+    console.warn(`[WARN] Could not list jobs for run ${runId} in ${owner}/${repo}; keeping it as a run without jobs`);
+  }
+  keepFailedRun(event);
+}
+
+/** Resolves once every pending workflow_run jobs lookup has finished. */
+export async function settleWorkflowRunChecks(): Promise<void> {
+  while (pendingRunChecks.size > 0) {
+    await Promise.allSettled([...pendingRunChecks]);
+  }
 }
 
 export function clearDeliveryDedupe(): void {

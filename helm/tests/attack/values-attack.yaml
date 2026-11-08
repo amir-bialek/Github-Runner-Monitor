@@ -1,0 +1,22 @@
+# Story 7.1: attack test values, layered on top of ../../values-backend.yaml
+# and ../values-debug-it.yaml (Debug it on, invented names only).
+#
+# Local images built in CI and loaded into kind, so nothing is pulled from a
+# registry. The backend runs in mock mode: it opens the main port (3001) and
+# the results port (3002) with Debug it on, and needs no S3, GitHub or
+# Anthropic. The attack test starts the Debug Jobs itself from the chart's
+# job template, with the backend's own buildJob and buildSecret.
+deployment:
+  image:
+    name: backend
+    tag: attack-test
+  env:
+    regular:
+      USE_MOCK_DATA: "true"
+      # Required when Debug it is on; never read in mock mode.
+      JOB_STATE_S3_BUCKET: acme-attack-test-state
+debugIt:
+  debugNamespace: debug-it
+  jobImage:
+    repository: debug-job
+    tag: attack-test

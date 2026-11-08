@@ -1,4 +1,6 @@
 import { GitHubRunner, GitHubJob, JobActor, RunContext } from '../types/github';
+import type { StoredRun } from './jobStore.ts';
+import type { ResolvedTarget, TargetKind } from './debugIt/runs.ts';
 
 export function isMockMode(): boolean {
   return process.env.USE_MOCK_DATA === 'true';
@@ -32,6 +34,9 @@ export const mockRunners: GitHubRunner[] = [
 
 const REPOS = ['acme/web-app', 'acme/platform', 'acme/infra-tools', 'acme/billing-service', 'acme/deploy-tools'];
 
+/** Every invented repository of mock mode, including the one with a failed run without jobs (story 3.14). */
+export const MOCK_REPOSITORIES: readonly string[] = [...REPOS, 'acme/payments-api'];
+
 const MOCK_WORKFLOW_BY_JOB_NAME: Record<string, string> = {
   build: 'CI',
   'unit-tests': 'CI',
@@ -51,6 +56,7 @@ const MOCK_BRANCHES = ['main', 'feature/queue-position-fix', 'fix/runner-labels'
 const MOCK_EVENTS = ['push', 'pull_request', 'workflow_dispatch', 'schedule'];
 
 const mockRunContextByRunId: Record<number, RunContext> = {};
+const mockRepositoryByJobId = new Map<number, string>();
 
 function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString();
@@ -78,6 +84,7 @@ function makeJob(
     : null;
   const jobName = ['build', 'unit-tests', 'docker-build', 'package-release', 'lint', 'integration-tests'][index % 6]!;
 
+  mockRepositoryByJobId.set(id, repo);
   mockRunContextByRunId[runId] = {
     workflowName: MOCK_WORKFLOW_BY_JOB_NAME[jobName] ?? null,
     branch: branch ?? MOCK_BRANCHES[index % MOCK_BRANCHES.length]!,
@@ -150,4 +157,62 @@ export function mockRunContext(job: GitHubJob): RunContext {
       runUrl: job.run_url,
     }
   );
+}
+
+/**
+ * Invented workflow runs that failed before any job started (story 3.14): they
+ * show in mock Recent history as run rows, so Debug it can start on them.
+ */
+export const mockFailedRuns: StoredRun[] = [
+  {
+    id: 780001,
+    runAttempt: 1,
+    name: 'Deploy',
+    headBranch: 'main',
+    headSha: 'fedcba9876543210fedcba9876543210fedcba98',
+    htmlUrl: 'https://github.com/acme/payments-api/actions/runs/780001',
+    createdAt: minutesAgo(46),
+    runStartedAt: null,
+    updatedAt: minutesAgo(45),
+    conclusion: 'failure',
+    event: 'push',
+    repository: 'acme/payments-api',
+    headRepository: 'acme/payments-api',
+    actor: MOCK_ACTORS[1]!,
+  },
+];
+
+/**
+ * The Debug it target of a failed mock job or a failed mock run without jobs
+ * (story 3.14), or null. Only mock mode consults it.
+ */
+export function mockDebugTarget(kind: TargetKind, id: number): ResolvedTarget | null {
+  if (kind === 'job') {
+    const job = mockJobs.find((j) => j.id === id);
+    const repository = mockRepositoryByJobId.get(id);
+    if (!job || !repository || job.status !== 'completed' || job.conclusion !== 'failure') return null;
+    return {
+      kind: 'job',
+      id,
+      repository,
+      jobName: job.name,
+      headSha: job.head_sha || null,
+      branch: mockRunContext(job).branch,
+      workflowRunId: job.run_id,
+    };
+  }
+  if (kind === 'run') {
+    const run = mockFailedRuns.find((r) => r.id === id);
+    if (!run) return null;
+    return {
+      kind: 'run',
+      id,
+      repository: run.repository,
+      jobName: run.name ?? '',
+      headSha: run.headSha,
+      branch: run.headBranch,
+      workflowRunId: run.id,
+    };
+  }
+  return null;
 }
