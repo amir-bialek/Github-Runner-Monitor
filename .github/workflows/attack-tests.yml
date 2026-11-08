@@ -1,0 +1,245 @@
+name: Attack Tests
+
+# Story 7.1, job isolation: installs the chart into a kind cluster with Calico
+# (so NetworkPolicies are enforced), with Debug it on and invented values, and
+# runs helm/tests/attack/attack-test.sh: the Debug Job network rules (SR3),
+# the per-run Secret split (SR1, SR2, SR11) and the backend's RBAC. Uses no
+# repository secret.
+#
+# Story 7.2, job agent: the same cluster, then
+# helm/tests/attack/agent-attack-test.sh runs four real Debug Jobs with the
+# real Claude Code against hostile logs and repositories: repository config
+# ignored (SR4), only Read/Grep/Glob/Edit (SR5), no key leak (SR12), fix
+# target unchanged (SR14). Needs the repository secret CLAUDE_CODE_OAUTH_TOKEN
+# (the maintainer's Claude subscription token), passed explicitly by the
+# caller; without it the job fails ("CLAUDE_CODE_OAUTH_TOKEN is not set").
+#
+# Story 7.3, job github: no cluster. helm/tests/attack/github-write-attack.ts
+# mounts the backend's own Debug it routes in-process over the real GitHub App
+# adapter with the test Debug it GitHub App, opens one draft fix pull request
+# on ATTACK_TEST_REPO through the Open a PR route, then tries to push to and
+# merge into its default branch with an App token narrowed like Open a PR's,
+# checks that ATTACK_TEST_REPO_NO_RULESET gets no fix pull request and that
+# every patch rule is refused with no GitHub request (SR6, SR7, SR9, SR10).
+# Needs the repository secrets ATTACK_TEST_GITHUB_APP_ID,
+# ATTACK_TEST_GITHUB_APP_PRIVATE_KEY, ATTACK_TEST_REPO and
+# ATTACK_TEST_REPO_NO_RULESET, passed explicitly by the caller; a missing one
+# fails the job ("<NAME> is not set").
+#
+# Story 7.4, job leak: the same cluster plus MinIO and the frontend release.
+# helm/tests/attack/leak-attack-test.sh scales the chart backend to 0 and runs
+# helm/tests/attack/leak-backend.ts in a test pod with the backend's image,
+# labels and service account: the authorization matrix of every Debug it
+# route (SR13), the personal key flow, a real run with real Claude Code
+# through the 7.2 key helper and a hostile result with Open a PR on
+# ATTACK_TEST_REPO (SR12, SR15), the App's writes and tokens across the job
+# (SR6, SR10); then Playwright with Chromium opens the real frontend on the
+# hostile run (SR16: no script, no outside request, CSP, CSRF), and
+# leak-sweep.mjs searches every captured output for every known key, token
+# and code (SR12). Reuses CLAUDE_CODE_OAUTH_TOKEN, ATTACK_TEST_GITHUB_APP_ID,
+# ATTACK_TEST_GITHUB_APP_PRIVATE_KEY and ATTACK_TEST_REPO (no new secret); a
+# missing one fails the job ("<NAME> is not set").
+#
+# Called by PR Validate (job attack-tests, checks "attack-tests / isolation",
+# "attack-tests / agent", "attack-tests / github" and "attack-tests / leak")
+# for internal pull requests changing code/backend, code/debug-job,
+# code/frontend, helm, docker/Dockerfile.backend, docker/Dockerfile.frontend,
+# docker/nginx.conf or these workflows (skipped otherwise, and for forks,
+# which get no secrets), and by Release Publish before publishing. The shared
+# cluster setup is the local composite action .github/actions/attack-cluster.
+
+on:
+  workflow_call:
+    inputs:
+      run:
+        description: 'Run the attack tests; false reports the isolation, agent, github and leak jobs as skipped'
+        type: boolean
+        default: true
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        description: 'Claude subscription token for the agent and leak jobs, used only by their test key helper'
+        required: false
+      ATTACK_TEST_GITHUB_APP_ID:
+        description: 'App ID of the test Debug it GitHub App, for the github and leak jobs'
+        required: false
+      ATTACK_TEST_GITHUB_APP_PRIVATE_KEY:
+        description: 'Private key of the test Debug it GitHub App, for the github and leak jobs'
+        required: false
+      ATTACK_TEST_REPO:
+        description: 'owner/name of the test repository with a ruleset on its default branch'
+        required: false
+      ATTACK_TEST_REPO_NO_RULESET:
+        description: 'owner/name of the test repository without a ruleset (same owner)'
+        required: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolation:
+    # workflow_dispatch has no inputs, so inputs.run is empty there: run.
+    if: inputs.run != false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up the attack test cluster
+        uses: ./.github/actions/attack-cluster
+
+      - name: Run the attack tests
+        run: bash helm/tests/attack/attack-test.sh
+
+      - name: Delete the kind cluster
+        if: always()
+        run: kind delete cluster --name attack-test || true
+
+  agent:
+    # Same condition as isolation: internal pull requests touching the
+    # attack paths, releases and manual runs.
+    if: inputs.run != false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Runs share the one subscription token: never overlap them.
+    concurrency:
+      group: attack-tests-agent
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Test the agent attack test helpers
+        run: node --test 'helm/tests/attack/*.test.mjs'
+
+      - name: Check the token is set
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]; then
+            echo "FAIL - CLAUDE_CODE_OAUTH_TOKEN is not set"
+            exit 1
+          fi
+
+      - name: Set up the attack test cluster
+        uses: ./.github/actions/attack-cluster
+
+      - name: Install backend dependencies (fix-target.ts)
+        working-directory: code/backend
+        run: npm ci
+
+      - name: Run the agent attack tests
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: bash helm/tests/attack/agent-attack-test.sh
+
+      - name: Delete the kind cluster
+        if: always()
+        run: kind delete cluster --name attack-test || true
+
+  github:
+    # Same condition as isolation: internal pull requests touching the
+    # attack paths, releases and manual runs. No cluster.
+    if: inputs.run != false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Runs write to the same test repositories: never overlap them.
+    concurrency:
+      group: attack-tests-github
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install backend dependencies (the routes run in-process)
+        working-directory: code/backend
+        run: npm ci
+
+      - name: Test the GitHub write attack test against a fake GitHub
+        run: node --test helm/tests/attack/github-write-attack.test.ts
+
+      - name: Run the GitHub write attack tests
+        env:
+          ATTACK_TEST_GITHUB_APP_ID: ${{ secrets.ATTACK_TEST_GITHUB_APP_ID }}
+          ATTACK_TEST_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ATTACK_TEST_GITHUB_APP_PRIVATE_KEY }}
+          ATTACK_TEST_REPO: ${{ secrets.ATTACK_TEST_REPO }}
+          ATTACK_TEST_REPO_NO_RULESET: ${{ secrets.ATTACK_TEST_REPO_NO_RULESET }}
+        run: node helm/tests/attack/github-write-attack.ts
+
+  leak:
+    # Same condition as isolation: internal pull requests touching the
+    # attack paths, releases and manual runs.
+    if: inputs.run != false
+    runs-on: ubuntu-latest
+    # Setup, up to 40 min until the browser test (READY_WAIT_SECONDS) and
+    # 10 min for the harness's end (END_WAIT_SECONDS), plus the sweep.
+    timeout-minutes: 90
+    # Keeps leak runs from overlapping each other only. The agent and github
+    # jobs may run beside it: its fix branch is per run (debug-it/<run ID>/),
+    # and sharing the token with the agent job is the same rate-limit risk
+    # Story 7.2 recorded.
+    concurrency:
+      group: attack-tests-leak
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Check the secrets are set
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ATTACK_TEST_GITHUB_APP_ID: ${{ secrets.ATTACK_TEST_GITHUB_APP_ID }}
+          ATTACK_TEST_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ATTACK_TEST_GITHUB_APP_PRIVATE_KEY }}
+          ATTACK_TEST_REPO: ${{ secrets.ATTACK_TEST_REPO }}
+        run: |
+          for name in CLAUDE_CODE_OAUTH_TOKEN ATTACK_TEST_GITHUB_APP_ID ATTACK_TEST_GITHUB_APP_PRIVATE_KEY ATTACK_TEST_REPO; do
+            if [ -z "${!name}" ]; then
+              echo "FAIL - $name is not set"
+              exit 1
+            fi
+          done
+
+      - name: Set up the attack test cluster (with the frontend image)
+        uses: ./.github/actions/attack-cluster
+        with:
+          frontend: 'true'
+
+      - name: Install backend dependencies (the harness runs the backend under tsx)
+        working-directory: code/backend
+        run: npm ci
+
+      - name: Install the browser test dependencies (Playwright)
+        working-directory: helm/tests/attack/browser
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        working-directory: helm/tests/attack/browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Test the leak sweep and the harness's authorization and audit checks
+        run: |
+          node --test helm/tests/attack/leak-sweep.test.mjs helm/tests/attack/browser-attack.test.mjs
+          node --test helm/tests/attack/leak-backend.test.ts
+
+      - name: Run the leak sweep and dashboard attack tests
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ATTACK_TEST_GITHUB_APP_ID: ${{ secrets.ATTACK_TEST_GITHUB_APP_ID }}
+          ATTACK_TEST_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ATTACK_TEST_GITHUB_APP_PRIVATE_KEY }}
+          ATTACK_TEST_REPO: ${{ secrets.ATTACK_TEST_REPO }}
+        run: bash helm/tests/attack/leak-attack-test.sh
+
+      - name: Delete the kind cluster
+        if: always()
+        run: kind delete cluster --name attack-test || true

@@ -1,0 +1,47 @@
+# Test values for helm/tests/chart-test.sh: Debug it on with every required
+# value. Layered on top of ../values-backend.yaml; the script also sets
+# deployment.env.regular.JOB_STATE_S3_BUCKET. Invented names only.
+debugIt:
+  enabled: true
+  credentialsMode: organization
+  monthlyCap: 5
+  loginScope: debug-it-only
+  administrators:
+  - 1000001
+  - 1000002
+  allowedRepositories:
+  - acme/payments-api
+  - acme/checkout-web
+  allowedUsers:
+  - 1000003
+  publicUrl: https://runner-monitor.acme.example
+  githubApp:
+    appId: 123456
+    clientId: Iv1.acmepaymentsapi
+    privateKeySecret:
+      name: acme-debug-it-app
+      key: privateKey
+    clientSecretSecret:
+      name: acme-debug-it-app
+      key: clientSecret
+  encryptionSecret:
+    name: acme-debug-it-encryption
+  anthropicApiKeySecret:
+    name: acme-anthropic
+    key: apiKey
+  debugNamespace: debug-it
+  jobImage:
+    repository: acme/debug-job
+    tag: 1.2.0
+  limits:
+    maxConcurrentRuns: 3
+    maxRunsPerUser: 1
+    timeLimitMinutes: 15
+    spendLimitUsd: 2.5
+    logLimitBytes: 2097152
+    patchLimitBytes: 102400
+    organizationMonthlySpendLimitUsd: 0
+  costTelemetry:
+    enabled: false
+    endpoint: ""
+    apiKeySecret: {}

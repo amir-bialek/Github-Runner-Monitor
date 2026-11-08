@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "explanation": "The integration tests in payments-api time out waiting for the database container. The analysis stopped at the time limit before a patch was written.",
+  "causeLocation": { "kind": "unknown" },
+  "patch": "",
+  "costUsd": 1.35,
+  "inputTokens": 150300,
+  "outputTokens": 4100,
+  "durationMs": 840000,
+  "logTruncated": false,
+  "failureReason": "time-limit"
+}

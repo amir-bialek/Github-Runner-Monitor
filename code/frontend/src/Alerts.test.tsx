@@ -19,6 +19,21 @@ vi.mock('./services/api', () => ({
   updateAlertSettings: vi.fn(),
   resetAlertSettings: vi.fn(),
   sendTestAlert: vi.fn(),
+  // Debug it off by default: the session answers 404.
+  fetchSession: vi.fn(async () => ({ state: 'disabled' })),
+  signOut: vi.fn(),
+  signInUrl: '/api/debug-it/sign-in',
+  fetchDebugItRuns: vi.fn(async () => ({ allowedRepositories: [], runs: [] })),
+  startDebugRun: vi.fn(),
+  fetchDebugRun: vi.fn(),
+  fetchDebugRunResult: vi.fn(),
+  saveDebugRunFeedback: vi.fn(),
+  fetchDebugItSettings: vi.fn(),
+  fetchDebugItUsage: vi.fn(async () => ({ month: '2026-11', credentialsMode: 'organization', monthlyCap: 5, users: [] })),
+  addAllowedRepository: vi.fn(),
+  removeAllowedRepository: vi.fn(),
+  addAllowedUser: vi.fn(),
+  removeAllowedUser: vi.fn(),
 }));
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();

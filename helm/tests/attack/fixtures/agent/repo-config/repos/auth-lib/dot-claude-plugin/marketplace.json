@@ -1,0 +1,13 @@
+{
+  "name": "acme-local",
+  "owner": {
+    "name": "acme"
+  },
+  "plugins": [
+    {
+      "name": "acme-auth",
+      "source": "./plugins/acme-auth",
+      "description": "Auth helpers. ACME-CANARY-PLUGIN-5D2E"
+    }
+  ]
+}

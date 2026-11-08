@@ -1,0 +1,172 @@
+{{- /*
+Debug it, story 3.5: the backend's rights in the debug namespace, the network
+rules around the Debug Job and the backend, and the Debug Job template.
+Renders nothing unless Debug it is on in the backend release.
+*/ -}}
+{{- if eq (include "debugIt.active" .) "true" }}
+{{- include "debugIt.validate" . }}
+{{- $d := .Values.debugIt }}
+{{- $debugNamespace := include "debugIt.scalar" $d.debugNamespace }}
+{{- $sa := include "debugIt.serviceAccountName" . }}
+{{- $service := include "debugIt.backendService" . | fromJson }}
+{{- $resultsPort := include "debugIt.resultsPort" . }}
+{{- $net := default dict $d.network }}
+{{- $cidrs := $net.anthropicCidrs | default (list "160.79.104.0/23" "2607:6bc0::/48") }}
+{{- $dnsNamespace := include "debugIt.scalar" $net.dnsNamespace | default "kube-system" }}
+{{- $dnsLabels := $net.dnsPodLabels | default (dict "k8s-app" "kube-dns") }}
+{{- $frontendLabels := $net.frontendPodLabels | default (dict "app" "github-runner-monitor-frontend") }}
+{{- $ingressNamespace := include "debugIt.scalar" $net.ingressControllerNamespace | default "ingress-nginx" }}
+{{- $ingressLabels := $net.ingressControllerPodLabels | default (dict "app.kubernetes.io/name" "ingress-nginx") }}
+{{- if not (and (hasKey .Values "serviceAccount") (eq .Values.serviceAccount.enabled true)) }}
+---
+# The backend's identity for the Kubernetes API (serviceAccount.enabled is
+# false, so the chart renders none of its own).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{ toYaml .Values.deployment.labels | nindent 4 }}
+{{- end }}
+---
+# What the backend may do in the debug namespace, and nothing more (AD-6):
+# start, follow and delete Debug Jobs, read their pods, create and delete the
+# per-run Secret. No reading Secrets, no ConfigMaps, no logs, no exec.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: debug-it-backend
+  namespace: {{ $debugNamespace }}
+  labels: {{ toYaml .Values.deployment.labels | nindent 4 }}
+rules:
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["create", "get", "list", "watch", "delete"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: debug-it-backend
+  namespace: {{ $debugNamespace }}
+  labels: {{ toYaml .Values.deployment.labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: debug-it-backend
+subjects:
+- kind: ServiceAccount
+  name: {{ $sa }}
+  namespace: {{ .Release.Namespace }}
+---
+# Debug Job pods: in only from the backend to the upload port; out only to
+# Anthropic on 443, cluster DNS and the backend results port (AD-9).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: debug-it-job
+  namespace: {{ $debugNamespace }}
+  labels:
+    {{- include "debugIt.jobLabels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "debugIt.jobLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      podSelector:
+        matchLabels: {{ toYaml .Values.deployment.labels | nindent 10 }}
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    {{- range $cidrs }}
+    - ipBlock:
+        cidr: {{ . | toString | quote }}
+    {{- end }}
+    ports:
+    - protocol: TCP
+      port: 443
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $dnsNamespace }}
+      podSelector:
+        matchLabels: {{ toYaml $dnsLabels | nindent 10 }}
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      podSelector:
+        matchLabels: {{ toYaml .Values.deployment.labels | nindent 10 }}
+    ports:
+    - protocol: TCP
+      port: {{ $resultsPort }}
+---
+# The backend: the results port only from Debug Job pods; the main port only
+# from the frontend and the ingress controller. Egress stays open.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "debugIt.deploymentName" . }}-debug-it
+  namespace: {{ .Release.Namespace }}
+  labels: {{ toYaml .Values.deployment.labels | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{ toYaml .Values.deployment.labels | nindent 6 }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $debugNamespace }}
+      podSelector:
+        matchLabels:
+          {{- include "debugIt.jobLabels" . | nindent 10 }}
+    ports:
+    - protocol: TCP
+      port: {{ $resultsPort }}
+  - from:
+    - podSelector:
+        matchLabels: {{ toYaml $frontendLabels | nindent 10 }}
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: {{ $ingressNamespace }}
+      podSelector:
+        matchLabels: {{ toYaml $ingressLabels | nindent 10 }}
+    ports:
+    - protocol: TCP
+      port: {{ $service.targetPort }}
+---
+# The Debug Job template the backend fills in per run (AD-8), and the startup
+# isolation check Job template (story 3.6). They travel to the backend as the
+# DEBUG_IT_JOB_TEMPLATE and DEBUG_IT_CHECK_JOB_TEMPLATE env vars; neither holds
+# a secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: debug-it-job-template
+  namespace: {{ .Release.Namespace }}
+  labels: {{ toYaml .Values.deployment.labels | nindent 4 }}
+data:
+  job.json: {{ include "debugIt.jobTemplate" . | fromYaml | toJson | quote }}
+  check-job.json: {{ include "debugIt.checkJobTemplate" . | fromYaml | toJson | quote }}
+{{- end }}

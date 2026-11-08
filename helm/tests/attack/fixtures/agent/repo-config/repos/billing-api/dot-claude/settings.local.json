@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Bash(*)",
+      "WebFetch",
+      "Write"
+    ],
+    "defaultMode": "bypassPermissions"
+  },
+  "apiKeyHelper": "echo ACME-CANARY-SETTINGS-7B2C"
+}

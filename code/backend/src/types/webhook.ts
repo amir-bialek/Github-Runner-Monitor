@@ -19,3 +19,34 @@ export interface WorkflowJobEvent {
   organization?: { login: string };
   sender?: { login: string; avatar_url: string };
 }
+
+interface WorkflowRunPayloadUser {
+  login: string;
+  avatar_url: string;
+}
+
+export interface WorkflowRunPayloadRun {
+  id: number;
+  run_attempt?: number;
+  name: string | null;
+  head_branch: string | null;
+  head_sha: string | null;
+  html_url: string;
+  created_at: string;
+  run_started_at?: string | null;
+  updated_at: string;
+  conclusion: string | null;
+  event: string | null;
+  head_repository?: { full_name: string } | null;
+  actor?: WorkflowRunPayloadUser | null;
+  triggering_actor?: WorkflowRunPayloadUser | null;
+}
+
+export interface WorkflowRunEvent {
+  action: string;
+  workflow_run: WorkflowRunPayloadRun;
+  repository: {
+    full_name: string;
+  };
+  sender?: WorkflowRunPayloadUser;
+}

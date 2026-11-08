@@ -1,0 +1,13 @@
+{
+  "enabledPlugins": {
+    "acme-auth@acme-local": true
+  },
+  "extraKnownMarketplaces": {
+    "acme-local": {
+      "source": {
+        "source": "directory",
+        "path": "/work/repos/auth-lib"
+      }
+    }
+  }
+}

@@ -19,6 +19,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      attack: ${{ steps.filter.outputs.attack }}
     steps:
       - name: Filter changed paths
         id: filter
@@ -27,11 +28,181 @@ jobs:
           filters: |
             backend:
               - 'code/backend/**'
+              - 'code/debug-job/**'
               - 'docker/Dockerfile.backend'
             frontend:
               - 'code/frontend/**'
               - 'docker/Dockerfile.frontend'
               - 'docker/nginx.conf'
+            attack:
+              - 'code/backend/**'
+              - 'code/debug-job/**'
+              - 'code/frontend/**'
+              - 'helm/**'
+              - 'docker/Dockerfile.backend'
+              - 'docker/Dockerfile.frontend'
+              - 'docker/nginx.conf'
+              - '.github/workflows/attack-tests.yml'
+              - '.github/workflows/pr-validate.yml'
+              - '.github/actions/attack-cluster/**'
+
+  test-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: code/backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: code/backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backend tests
+        run: npm test
+
+  secret-scan:
+    # No repository secrets are used, so this is safe on fork pull requests.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.28.0
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -O "${base}/${tarball}"
+          curl -sSfL -O "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          set -o pipefail
+          grep " ${tarball}\$" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "${tarball}" gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan pull request commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gitleaks git --redact --verbose --log-opts="${BASE_SHA}..${HEAD_SHA}" .
+
+  helm-chart:
+    # Proves the Debug it switch: off renders exactly the 1.x chart, on fails
+    # when a required value is missing. Compares against the 1.x commit, so it
+    # needs the full history.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Run chart tests
+        run: bash helm/tests/chart-test.sh
+
+      - name: Run release version tests
+        run: bash .github/scripts/release-version.test.sh
+
+      - name: Run release notes tests
+        run: bash .github/scripts/release-notes.test.sh
+
+  attack-tests:
+    # Story 7.1: the chart in kind with Calico, attacked from a Debug Job pod
+    # (check "attack-tests / isolation"); Story 7.2: hostile logs and
+    # repositories through real Debug Jobs and Claude Code (check
+    # "attack-tests / agent"); Story 7.3: pushes, merges and patch rules
+    # against the test repositories with the test App (check
+    # "attack-tests / github"); Story 7.4: the authorization matrix, a real
+    # run and Open a PR, the browser test of the dashboard and the leak sweep
+    # (check "attack-tests / leak"). Lives in PR Validate so a failure fails
+    # PR Validate and Story Auto Merge never merges. Runs only for pull
+    # requests from this repository's own branches (no fork code on the
+    # cluster runner) that change code/backend, code/debug-job, code/frontend,
+    # helm, docker/Dockerfile.backend, docker/Dockerfile.frontend,
+    # docker/nginx.conf or these workflows. Otherwise the called job is
+    # skipped inside the reusable workflow, so the checks still report
+    # "attack-tests / isolation", "attack-tests / agent",
+    # "attack-tests / github" and "attack-tests / leak" as skipped, which
+    # counts as passed.
+    needs: detect-changes
+    uses: ./.github/workflows/attack-tests.yml
+    with:
+      run: ${{ needs.detect-changes.outputs.attack == 'true' && github.event.pull_request.head.repo.full_name == github.repository }}
+    # Story 7.2: the agent job's Claude subscription token; Story 7.3: the
+    # github job's test App and test repositories; Story 7.4: the leak job
+    # reuses the token, the App and ATTACK_TEST_REPO. Fork pull requests get
+    # no secrets, and run is false for them anyway.
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ATTACK_TEST_GITHUB_APP_ID: ${{ secrets.ATTACK_TEST_GITHUB_APP_ID }}
+      ATTACK_TEST_GITHUB_APP_PRIVATE_KEY: ${{ secrets.ATTACK_TEST_GITHUB_APP_PRIVATE_KEY }}
+      ATTACK_TEST_REPO: ${{ secrets.ATTACK_TEST_REPO }}
+      ATTACK_TEST_REPO_NO_RULESET: ${{ secrets.ATTACK_TEST_REPO_NO_RULESET }}
+
+  lint-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: code/backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: code/backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint backend
+        run: npm run lint
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: code/frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: code/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests
+        run: npx vitest run
 
   build-backend:
     needs: detect-changes
@@ -61,6 +232,65 @@ jobs:
       - name: Stop and remove container
         if: always()
         run: docker rm -f backend-pr-check
+
+  build-debug-job:
+    # The Debug Job image (receiver, key helper, Claude Code). Build context is
+    # code/debug-job; detect-changes' backend filter includes that folder.
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Build Debug Job image
+        run: docker build -t debug-job:pr-check code/debug-job
+
+      - name: Check the image runs as uid and gid 1000
+        run: |
+          ids="$(docker run --rm debug-job:pr-check sh -c 'echo "$(id -u):$(id -g)"')"
+          echo "uid:gid ${ids}"
+          if [ "${ids}" != "1000:1000" ]; then
+            echo "Debug Job image must run as uid 1000 and gid 1000"
+            exit 1
+          fi
+
+      - name: Check the Claude Code version
+        run: |
+          version="$(docker run --rm debug-job:pr-check claude --version)"
+          echo "${version}"
+          case "${version}" in
+            "2.1.316" | "2.1.316 "*) ;;
+            *) echo "Claude Code must be 2.1.316"; exit 1 ;;
+          esac
+
+      - name: Check each program refuses to start without its secret or configuration
+        run: |
+          expect_refusal() {
+            set +e
+            out="$(docker run --rm debug-job:pr-check node "$1" 2>&1)"
+            status=$?
+            set -e
+            echo "${out}"
+            if [ "${status}" != "${3:-1}" ] || [ "$(printf '%s\n' "${out}" | tail -n 1)" != "$2" ]; then
+              echo "$1 must exit ${3:-1} with: $2"
+              exit 1
+            fi
+          }
+          expect_refusal /app/src/receiver.ts "receiver: upload code file is missing or empty, exiting"
+          expect_refusal /app/src/keyHelper.ts "key helper: key file is missing or empty, exiting"
+          expect_refusal /app/src/wrapper.ts "wrapper: configuration is missing or invalid, exiting"
+          expect_refusal /app/src/isolationCheck.ts "isolation check: configuration is missing or invalid, exiting" 2
+
+      - name: Import each program
+        run: |
+          docker run --rm debug-job:pr-check node -e "
+            const files = ['receiver', 'keyHelper', 'tar', 'wrapper', 'diff', 'isolationCheck'];
+            Promise.all(files.map((f) => import('/app/src/' + f + '.ts')))
+              .then(() => console.log('all programs import'))
+              .catch((error) => { console.error(error); process.exit(1); });
+          "
 
   build-frontend:
     needs: detect-changes

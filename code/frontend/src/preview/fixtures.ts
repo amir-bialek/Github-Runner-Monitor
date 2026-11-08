@@ -150,6 +150,7 @@ export const previewHistory: HistoryJob[] = [
     durationMs: 62 * 60 * 1000,
     htmlUrl: `${LONG_REPOSITORY_URL}/actions/runs/720301/job/920301`,
     runUrl: `${LONG_REPOSITORY_URL}/actions/runs/720301`,
+    target: { kind: 'job', id: 920301 },
   },
   {
     id: 920302,
@@ -169,6 +170,7 @@ export const previewHistory: HistoryJob[] = [
     durationMs: 2 * 60 * 1000,
     htmlUrl: 'https://github.com/acme/web-app/actions/runs/720302/job/920302',
     runUrl: 'https://github.com/acme/web-app/actions/runs/720302',
+    target: { kind: 'job', id: 920302 },
   },
   {
     id: 920303,
@@ -188,6 +190,7 @@ export const previewHistory: HistoryJob[] = [
     durationMs: 7 * 60 * 1000,
     htmlUrl: 'https://github.com/acme/infra-tools/actions/runs/720303/job/920303',
     runUrl: 'https://github.com/acme/infra-tools/actions/runs/720303',
+    target: { kind: 'job', id: 920303 },
   },
   {
     id: 920304,
@@ -207,6 +210,7 @@ export const previewHistory: HistoryJob[] = [
     durationMs: (3 * 24 * 60 + 1) * 60 * 1000,
     htmlUrl: `${LONG_REPOSITORY_URL}/actions/runs/720304/job/920304`,
     runUrl: `${LONG_REPOSITORY_URL}/actions/runs/720304`,
+    target: { kind: 'job', id: 920304 },
   },
   {
     id: 920305,
@@ -226,5 +230,28 @@ export const previewHistory: HistoryJob[] = [
     durationMs: null,
     htmlUrl: 'https://github.com/acme/web-app/actions/runs/720305/job/920305',
     runUrl: 'https://github.com/acme/web-app/actions/runs/720305',
+    target: { kind: 'job', id: 920305 },
+  },
+  {
+    // A failed run that never started a job (a broken workflow file): the
+    // row is the run itself, named after the workflow.
+    id: 720306,
+    name: 'Deploy',
+    workflowName: 'Deploy',
+    branch: 'main',
+    actor: person('devlin-park'),
+    event: 'push',
+    repository: 'acme/payments-api',
+    repositoryUrl: 'https://github.com/acme/payments-api',
+    result: 'failure',
+    runnerName: null,
+    scaleSet: null,
+    createdAt: minutesAgo(45),
+    startedAt: null,
+    completedAt: minutesAgo(44),
+    durationMs: null,
+    htmlUrl: 'https://github.com/acme/payments-api/actions/runs/720306',
+    runUrl: 'https://github.com/acme/payments-api/actions/runs/720306',
+    target: { kind: 'run', id: 720306 },
   },
 ];

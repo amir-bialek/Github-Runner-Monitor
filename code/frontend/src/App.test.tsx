@@ -6,6 +6,7 @@ import App from './App';
 import * as api from './services/api';
 import { toApiError } from './services/apiError';
 import { HistoryJob, QueueItem, QueueResponse, RunningResponse, ScaleSet } from './types/api';
+import { previewHistory } from './preview/fixtures';
 
 vi.mock('./services/api', () => ({
   fetchScaleSets: vi.fn(),
@@ -19,6 +20,21 @@ vi.mock('./services/api', () => ({
   updateAlertSettings: vi.fn(),
   resetAlertSettings: vi.fn(),
   sendTestAlert: vi.fn(),
+  // Debug it off by default: the session answers 404.
+  fetchSession: vi.fn(async () => ({ state: 'disabled' })),
+  signOut: vi.fn(),
+  signInUrl: '/api/debug-it/sign-in',
+  fetchDebugItRuns: vi.fn(async () => ({ allowedRepositories: [], runs: [] })),
+  startDebugRun: vi.fn(),
+  fetchDebugRun: vi.fn(),
+  fetchDebugRunResult: vi.fn(),
+  saveDebugRunFeedback: vi.fn(),
+  fetchDebugItSettings: vi.fn(),
+  fetchDebugItUsage: vi.fn(async () => ({ month: '2026-11', credentialsMode: 'organization', monthlyCap: 5, users: [] })),
+  addAllowedRepository: vi.fn(),
+  removeAllowedRepository: vi.fn(),
+  addAllowedUser: vi.fn(),
+  removeAllowedUser: vi.fn(),
 }));
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60 * 1000).toISOString();
@@ -158,7 +174,30 @@ const historyJobs = (count: number): HistoryJob[] => Array.from({ length: count 
   durationMs: 6 * 60 * 1000,
   htmlUrl: `https://github.com/acme/infra-tools/actions/runs/70${index}/job/80${index}`,
   runUrl: `https://github.com/acme/infra-tools/actions/runs/70${index}`,
+  target: { kind: 'job' as const, id: 800000 + index },
 }));
+
+const failedRun = (overrides: Partial<HistoryJob> = {}): HistoryJob => ({
+  id: 700900,
+  name: 'Deploy',
+  workflowName: 'Deploy',
+  branch: 'main',
+  actor: { login: 'devlin-park', avatarUrl: 'https://avatars.example/devlin' },
+  event: 'push',
+  repository: 'acme/payments-api',
+  repositoryUrl: 'https://github.com/acme/payments-api',
+  result: 'failure',
+  runnerName: null,
+  scaleSet: null,
+  createdAt: minutesAgo(46),
+  startedAt: null,
+  completedAt: minutesAgo(45),
+  durationMs: null,
+  htmlUrl: 'https://github.com/acme/payments-api/actions/runs/700900',
+  runUrl: 'https://github.com/acme/payments-api/actions/runs/700900',
+  target: { kind: 'run', id: 700900 },
+  ...overrides,
+});
 
 const mockHistory: HistoryJob[] = historyJobs(8);
 
@@ -883,5 +922,184 @@ describe('App dashboard', () => {
 
     expect(await screen.findByText(/GitHub organization not configured/i)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  describe('failed runs without jobs in Recent history', () => {
+    const historyRows = () =>
+      within(screen.getByRole('table', { name: /job history/i })).getAllByRole('row').slice(1);
+    const names = () =>
+      historyRows().map((row) => within(row).getAllByRole('cell')[0].textContent ?? '');
+
+    test('a run row is one row: the workflow name linking to the run, and the usual cells', async () => {
+      vi.mocked(api.fetchJobHistory).mockResolvedValue([...historyJobs(2), failedRun()]);
+      renderApp();
+      await screen.findByRole('table', { name: /job history/i });
+
+      const link = screen.getByRole('link', {
+        name: 'Workflow run Deploy in acme/payments-api, Failed, no jobs started — opens on github.com',
+      });
+      expect(link).toHaveAttribute('href', 'https://github.com/acme/payments-api/actions/runs/700900');
+
+      const row = link.closest('tr') as HTMLElement;
+      const cells = within(row).getAllByRole('cell').map((cell) => cell.textContent ?? '');
+      expect(cells[0]).toBe('Deploy');
+      expect(cells[1]).toContain('payments-api');
+      expect(cells[2]).toContain('main');
+      expect(cells[3]).toBe('devlin-park');
+      expect(cells[4]).toBe('unknown');
+      expect(cells[5]).toBe('—');
+      expect(cells[6]).toMatch(/\d{2}\.\d{2} \| \d{2}:\d{2}/);
+      expect(cells[7]).toContain('Failed');
+      expect(historyRows()).toHaveLength(3);
+    });
+
+    test('job rows keep their label', async () => {
+      vi.mocked(api.fetchJobHistory).mockResolvedValue([...historyJobs(1), failedRun()]);
+      renderApp();
+      await screen.findByRole('table', { name: /job history/i });
+
+      expect(
+        screen.getByRole('link', {
+          name: 'Job finished-0 in acme/infra-tools, Success — opens on github.com',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    test('a job and a run with the same id are two rows without a key warning', async () => {
+      const consoleError = vi.spyOn(console, 'error');
+      try {
+        vi.mocked(api.fetchJobHistory).mockResolvedValue([
+          ...historyJobs(1),
+          failedRun({ id: 800000, target: { kind: 'run', id: 800000 } }),
+        ]);
+        renderApp();
+        await screen.findByRole('table', { name: /job history/i });
+
+        expect(names().sort()).toEqual(['Deploy', 'finished-0']);
+        expect(
+          consoleError.mock.calls.some((call) => call.some((arg) => String(arg).includes('same key'))),
+        ).toBe(false);
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+
+    test('a history item without a target (older backend) still renders as a job row', async () => {
+      const [legacy] = historyJobs(1);
+      const { target: _target, ...withoutTarget } = legacy;
+      vi.mocked(api.fetchJobHistory).mockResolvedValue([withoutTarget as HistoryJob]);
+      renderApp();
+      await screen.findByRole('table', { name: /job history/i });
+
+      expect(
+        screen.getByRole('link', {
+          name: 'Job finished-0 in acme/infra-tools, Success — opens on github.com',
+        }),
+      ).toBeInTheDocument();
+      expect(historyRows()).toHaveLength(1);
+    });
+
+    test('a run row sorts by its name and its missing duration like any other row', async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.fetchJobHistory).mockResolvedValue([
+        ...historyJobs(2),
+        failedRun(),
+        { ...historyJobs(3)[2], durationMs: null },
+      ]);
+      renderApp();
+      const table = await screen.findByRole('table', { name: /job history/i });
+
+      await user.click(within(table).getByRole('button', { name: /^job$/i }));
+      expect(names()).toEqual(['Deploy', 'finished-0', 'finished-1', 'finished-2']);
+      await user.click(within(table).getByRole('button', { name: /^job$/i }));
+      expect(names()).toEqual(['finished-2', 'finished-1', 'finished-0', 'Deploy']);
+
+      await user.click(within(table).getByRole('button', { name: /^duration$/i }));
+      expect(names().slice(0, 2).sort()).toEqual(['finished-0', 'finished-1']);
+      expect(names().slice(2).sort()).toEqual(['Deploy', 'finished-2']);
+    });
+
+    test('a run row pages like any other row', async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.fetchJobHistory).mockResolvedValue([
+        ...historyJobs(23),
+        failedRun(),
+        failedRun({ id: 700901, target: { kind: 'run', id: 700901 } }),
+      ]);
+      renderApp();
+      await screen.findByRole('table', { name: /job history/i });
+
+      expect(historyRows()).toHaveLength(20);
+      await user.click(screen.getByRole('button', { name: /next page/i }));
+      expect(historyRows()).toHaveLength(5);
+    });
+
+    test('the preview holds exactly one invented failed run without jobs', () => {
+      const runs = previewHistory.filter((row) => row.target.kind === 'run');
+      expect(runs).toHaveLength(1);
+      const [run] = runs;
+      expect(run.repository).toBe('acme/payments-api');
+      expect(run.result).toBe('failure');
+      expect(run.runnerName).toBeNull();
+      expect(run.scaleSet).toBeNull();
+      expect(run.durationMs).toBeNull();
+      expect(run.htmlUrl).toBe(run.runUrl);
+      expect(run.htmlUrl).toMatch(/\/actions\/runs\/\d+$/);
+      expect(run.target.id).toBe(run.id);
+      expect(
+        previewHistory
+          .filter((row) => row.target.kind === 'job')
+          .every((row) => row.target.id === row.id),
+      ).toBe(true);
+    });
+  });
+});
+
+describe('App: Debug it in Recent history (story 3.11)', () => {
+  beforeEach(() => {
+    vi.mocked(api.fetchScaleSets).mockResolvedValue(mockScaleSets);
+    vi.mocked(api.fetchQueue).mockResolvedValue(mockQueue);
+    vi.mocked(api.fetchRunningJobs).mockResolvedValue(mockRunning);
+    vi.mocked(api.fetchJobHistory).mockResolvedValue([failedRun()]);
+    vi.mocked(api.fetchSettings).mockResolvedValue({ runnersRefreshSeconds: 30 });
+    vi.mocked(api.fetchAlerts).mockResolvedValue({ evaluatedAt: null, alerts: [] });
+    vi.mocked(api.fetchDebugItRuns).mockResolvedValue({ allowedRepositories: ['acme/payments-api'], runs: [] });
+  });
+
+  afterEach(() => {
+    vi.mocked(api.fetchSession).mockImplementation(async () => ({ state: 'disabled' }));
+    vi.mocked(api.fetchJobHistory).mockResolvedValue(mockHistory);
+    vi.clearAllMocks();
+  });
+
+  const historyTable = () => screen.findByRole('table', { name: /job history/i });
+
+  test('a signed in allowed user gets the Debug it column and button on a failed row', async () => {
+    // Invented values only; this is not a real token.
+    vi.mocked(api.fetchSession).mockResolvedValue({
+      state: 'signed-in',
+      githubUserId: 1000001,
+      login: 'dana',
+      csrfToken: 'test-csrf-value',
+      allowedUser: true,
+      administrator: false,
+      loginScope: 'debug-it-only',
+      credentialsMode: 'organization',
+    });
+    renderApp();
+    const table = await historyTable();
+    expect(await within(table).findByRole('columnheader', { name: 'Debug it' })).toBeInTheDocument();
+    expect(
+      await within(table).findByRole('button', { name: 'Debug it: Deploy in acme/payments-api' }),
+    ).toBeInTheDocument();
+  });
+
+  test('signed out: Sign in to debug on a failed row', async () => {
+    vi.mocked(api.fetchSession).mockResolvedValue({ state: 'signed-out', loginScope: 'debug-it-only' });
+    renderApp();
+    const table = await historyTable();
+    const link = await within(table).findByRole('link', { name: 'Sign in to debug: Deploy in acme/payments-api' });
+    expect(link).toHaveAttribute('href', '/api/debug-it/sign-in');
+    expect(api.fetchDebugItRuns).not.toHaveBeenCalled();
   });
 });

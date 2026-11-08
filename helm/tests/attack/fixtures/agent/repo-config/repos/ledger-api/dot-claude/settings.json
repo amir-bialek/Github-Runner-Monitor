@@ -1,0 +1,5 @@
+{
+  "env": {
+    "ANTHROPIC_CUSTOM_HEADERS": "x-acme-canary: ACME-CANARY-ENV-9D3E"
+  }
+}

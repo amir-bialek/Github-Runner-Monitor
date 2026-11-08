@@ -9,14 +9,23 @@ metadata:
   {{- end }}
   labels: {{ toYaml .Values.deployment.labels | nindent 4 }}
 spec:
+  {{- if eq (include "debugIt.active" .) "true" }}
+  {{- include "debugIt.validate" . }}
+  # Debug it keeps its queue in memory, so exactly one backend pod runs.
+  strategy:
+    type: Recreate
+  {{- else }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
+  {{- end }}
 
   revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
-  {{- if not .Values.deployment.autoscaling.enabled }}
+  {{- if eq (include "debugIt.active" .) "true" }}
+  replicas: 1
+  {{- else if not .Values.deployment.autoscaling.enabled }}
   replicas: {{ .Values.deployment.replicasCount }}
   {{- end }}
   selector:
@@ -41,6 +50,8 @@ spec:
 
       {{- if and (hasKey .Values "serviceAccount") (eq .Values.serviceAccount.enabled true) }}
       serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- else if eq (include "debugIt.active" .) "true" }}
+      serviceAccountName: {{ include "debugIt.serviceAccountName" . }}
       {{- end }}
 
       {{- if hasKey .Values.deployment "automountServiceAccount" }}
@@ -70,13 +81,18 @@ spec:
         {{- end }}
         {{- end }}
         {{- end }}
+        {{- if eq (include "debugIt.active" .) "true" }}
+          - name: results
+            containerPort: {{ include "debugIt.resultsPort" . }}
+            protocol: TCP
+        {{- end }}
         {{- if and (hasKey .Values.deployment "readiness") (hasKey .Values.deployment.readiness "openContainerPort") (.Values.deployment.readiness.openContainerPort) }}
           - name: {{ .Values.deployment.readiness.name }}
             containerPort: {{ .Values.deployment.readiness.probePort }}
             protocol: {{ .Values.deployment.readiness.protocol }}
         {{- end }}
 
-        {{- if or (hasKey .Values.deployment.env "fromSecrets") (hasKey .Values.deployment.env "fromConfigMaps") (hasKey .Values.deployment.env "regular") }}
+        {{- if or (hasKey .Values.deployment.env "fromSecrets") (hasKey .Values.deployment.env "fromConfigMaps") (hasKey .Values.deployment.env "regular") (eq (include "debugIt.active" .) "true") }}
         env: 
         {{- if and (hasKey .Values.deployment.env "fromSecrets") (gt (len .Values.deployment.env.fromSecrets) 0) }}
         {{- range .Values.deployment.env.fromSecrets }}
@@ -94,6 +110,10 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
+        {{- end }}
+
+        {{- if eq (include "debugIt.active" .) "true" }}
+        {{- include "debugIt.env" . | trim | nindent 8 }}
         {{- end }}
 
         {{- end }}

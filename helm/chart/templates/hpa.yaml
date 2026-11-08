@@ -1,5 +1,6 @@
 {{- if .Values.deployment.enabled }}
 {{- if .Values.deployment.autoscaling.enabled }}
+{{- include "debugIt.validate" . }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:

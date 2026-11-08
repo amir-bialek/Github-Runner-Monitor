@@ -1,0 +1,4 @@
+# Invented test value (acme-collector-key-...) in an earlier commit of story 6.1; removed from the file since.
+f53084bf72061a964c163b90d3b8fd4717d335fd:code/backend/tests/telemetry.test.ts:generic-api-key:16
+# Invented test value (FAKEPRIVATEKEY...) in an earlier commit of story 7.3; built from parts since.
+61ffc1c48cdfb0fe16aee8cf0e0f9648b02b8eb5:helm/tests/attack/github-write-attack.test.ts:private-key:20
