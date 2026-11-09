@@ -10,11 +10,8 @@ deployment:
   labels:
     app: github-runner-monitor-frontend
   image:
-    # Replace with the published image, e.g. bialekamir/github-runner-monitor.
-    # That repository has no plain latest tag: with it, set tag to
-    # frontend-vX.Y.Z (or frontend-latest).
-    name: ""
-    tag: latest
+    name: bialekamir/github-runner-monitor
+    tag: frontend-v2.1.0
   env:
     regular:
       APP_HEADING: "GitHub Runner Monitor"

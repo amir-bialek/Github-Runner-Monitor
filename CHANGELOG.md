@@ -1,6 +1,6 @@
 # Changelog
 
-What changed in each version of GitHub Runner Monitor, newest first, with the steps to take when upgrading. Each release from 2.0.0 on is also a GitHub Release, `vX.Y.Z`, holding its section of this file and the screenshots of its major version.
+What changed in each version of GitHub Runner Monitor, newest first, with the steps to take when upgrading. Each release from 2.1.0 on is also a GitHub Release, `vX.Y.Z`, holding its section of this file and the screenshots of its major version.
 
 ## 2.1.0
 
@@ -26,7 +26,7 @@ What changed in each version of GitHub Runner Monitor, newest first, with the st
 
 ### Upgrade steps
 
-1. **Use the new image tags.** Images are now tagged `backend-v2.0.0`, `frontend-v2.0.0` and `debug-job-v2.0.0` in `bialekamir/github-runner-monitor`, and the chart is version 2.0.0 with appVersion 2.0.0. Install the chart from the `v2.0.0` tag and set `deployment.image.tag` to `backend-v2.0.0` for the backend and `frontend-v2.0.0` for the frontend. The chart picks `debug-job-v<appVersion>` for the Debug Job on its own. The 1.x per-component tags (`backend-v1.0.x`, `frontend-v1.0.x`) are not published any more.
+1. **Use the new image tags.** 2.0.0 was never published; upgrade from 1.x straight to 2.1.0. Images are now tagged `backend-v2.1.0`, `frontend-v2.1.0` and `debug-job-v2.1.0` in `bialekamir/github-runner-monitor`, and the chart is version 2.1.0 with appVersion 2.1.0. Install the chart from the `v2.1.0` tag and set `deployment.image.tag` to `backend-v2.1.0` for the backend and `frontend-v2.1.0` for the frontend. The chart picks `debug-job-v<appVersion>` for the Debug Job on its own. The 1.x per-component tags (`backend-v1.0.x`, `frontend-v1.0.x`) are not published any more.
 2. **Tick the Workflow runs webhook event.** On the organization webhook (**Settings → Webhooks**, edit it), keep **Workflow jobs** and also tick **Workflow runs**. Without it the monitor works as before and only leaves out failed runs that never started a job.
 3. **Debug it stays off unless you turn it on.** Nothing about it runs until `debugIt.enabled` is set to `true` in the backend values; with it off the chart and the backend behave as 1.x. To turn it on, follow [Turn on Debug it](README.md#turn-on-debug-it) and read [Before you turn it on](README.md#before-you-turn-it-on) first.
 4. **Alert settings become administrator-only when Debug it is on.** Once `debugIt.enabled` is `true`, changing, resetting or testing the alert settings needs a signed in Debug it administrator (listed in `debugIt.administrators`); anyone else gets 401 or 403, and the dialog shows the values read-only. Reading the alert settings stays open. With Debug it off, alert settings behave exactly as in 1.x. `ALERT_SETTINGS_EDITABLE=false` still makes them read-only for everyone.

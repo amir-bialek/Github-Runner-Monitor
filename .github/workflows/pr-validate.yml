@@ -125,6 +125,13 @@ jobs:
       - name: Run release notes tests
         run: bash .github/scripts/release-notes.test.sh
 
+      - name: Check the release version
+        # Every merge to main is released, so the pull request must carry a
+        # version higher than main's.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: echo "Merging releases v$(bash .github/scripts/release-version.sh "$BASE_SHA")"
+
   attack-tests:
     # Story 7.1: the chart in kind with Calico, attacked from a Debug Job pod
     # (check "attack-tests / isolation"); Story 7.2: hostile logs and
