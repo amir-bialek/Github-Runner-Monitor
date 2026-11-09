@@ -11,7 +11,7 @@ deployment:
     app: github-runner-monitor-frontend
   image:
     name: bialekamir/github-runner-monitor
-    tag: frontend-v2.1.0
+    tag: frontend-v2.1.1
   env:
     regular:
       APP_HEADING: "GitHub Runner Monitor"

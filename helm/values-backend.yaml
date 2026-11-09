@@ -10,7 +10,7 @@ deployment:
     app: github-runner-monitor-backend
   image:
     name: bialekamir/github-runner-monitor
-    tag: backend-v2.1.0
+    tag: backend-v2.1.1
   resources:
     limits:
       cpu: 400m

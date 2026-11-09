@@ -37,9 +37,9 @@ runs:
         KUBECTL_SHA256: ab209d0c5134b61486a0486585604a616a5bb2fc07df46d304b3c95817b2d79f
       run: |
         set -euo pipefail
-        curl -sSfL -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+        curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
         echo "${KIND_SHA256}  kind" | sha256sum -c -
-        curl -sSfL -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+        curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
         echo "${KUBECTL_SHA256}  kubectl" | sha256sum -c -
         chmod +x kind kubectl
         sudo mv kind kubectl /usr/local/bin/
@@ -70,7 +70,7 @@ runs:
         CALICO_SHA256: 9a575859428b822a224dedafc4238555b6b0f910f2abf12983f20f871860914e
       run: |
         set -euo pipefail
-        curl -sSfL -o calico.yaml \
+        curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -o calico.yaml \
           "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
         echo "${CALICO_SHA256}  calico.yaml" | sha256sum -c -
         kubectl apply -f calico.yaml

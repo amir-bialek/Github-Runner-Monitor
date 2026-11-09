@@ -2,6 +2,13 @@
 
 What changed in each version of GitHub Runner Monitor, newest first, with the steps to take when upgrading. Each release from 2.1.0 on is also a GitHub Release, `vX.Y.Z`, holding its section of this file and the screenshots of its major version.
 
+## 2.1.1
+
+### What changed
+
+- **Shorter side panel.** The theme switch is a round button next to the heading, and the signed in user, Sign out and Personal key follow right after the last item instead of at the bottom of the window.
+- **Retried downloads in CI.** The workflows retry a failed download of gitleaks, kind, kubectl and Calico up to 5 times, so a short GitHub outage no longer fails a pull request or a release.
+
 ## 2.1.0
 
 ### What changed

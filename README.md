@@ -20,9 +20,9 @@ A live dashboard for self-hosted GitHub Actions runners. It shows how many runne
 
 ![The dashboard in the light theme, signed in to Debug it, with the runner pools, the job queue, the running jobs and the recent history with a Debug it button on failed rows.](docs/images/v2/dashboard-light.png)
 
-The side panel on the left of the page, with the Dashboard item, the Alerts item (showing how many alerts are active), the Debug it settings and Security items, the theme switch and the signed in user. On a window narrower than 900 pixels it opens from the menu button in the top bar:
+The side panel on the left of the page, with the theme switch next to the heading, the Dashboard item, the Alerts item (showing how many alerts are active), the Debug it settings and Security items, and the signed in user. On a window narrower than 900 pixels it opens from the menu button in the top bar:
 
-![Close-up of the side panel, with the heading, Dashboard, Alerts and its count, Debug it settings, Security, the Theme switch, the signed in user dana with a letter avatar, and Sign out.](docs/images/v2/side-panel.png)
+![Close-up of the side panel, with the heading and the theme switch, Dashboard, Alerts and its count, Debug it settings, Security, and the signed in user dana with a letter avatar and Sign out.](docs/images/v2/side-panel.png)
 
 The repositories and people in these pictures are made up. That is the fake data the app starts with. These are the 2.x screenshots; the 1.x ones are in [docs/images/v1](docs/images/v1). What changed between versions is in [CHANGELOG.md](CHANGELOG.md).
 
