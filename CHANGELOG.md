@@ -7,7 +7,7 @@ What changed in each version of GitHub Runner Monitor, newest first, with the st
 ### What changed
 
 - **Shorter side panel.** The theme switch is a round button next to the heading, and the signed in user, Sign out and Personal key follow right after the last item instead of at the bottom of the window.
-- **Retried downloads in CI.** The workflows retry a failed download of gitleaks, kind, kubectl and Calico up to 5 times, so a short GitHub outage no longer fails a pull request or a release.
+- **Signed in downloads in CI.** The workflows download gitleaks, kind and Calico from GitHub with the workflow's own token instead of anonymously, so GitHub outages that affect only anonymous downloads (HTTP 504) no longer fail a pull request or a release. The kubectl download retries up to 5 times.
 
 ## 2.1.0
 

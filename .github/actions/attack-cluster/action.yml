@@ -35,9 +35,14 @@ runs:
         KIND_SHA256: a6875aaea358acf0ac07786b1a6755d08fd640f4c79b7a2e46681cc13f49a04b
         KUBECTL_VERSION: v1.32.3
         KUBECTL_SHA256: ab209d0c5134b61486a0486585604a616a5bb2fc07df46d304b3c95817b2d79f
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -o kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+        for attempt in 1 2 3; do
+          gh release download "${KIND_VERSION}" -R kubernetes-sigs/kind -p kind-linux-amd64 -O kind --clobber && break
+          [ "$attempt" = 3 ] && exit 1
+          sleep 10
+        done
         echo "${KIND_SHA256}  kind" | sha256sum -c -
         curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -o kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
         echo "${KUBECTL_SHA256}  kubectl" | sha256sum -c -
@@ -68,10 +73,15 @@ runs:
       env:
         CALICO_VERSION: v3.29.3
         CALICO_SHA256: 9a575859428b822a224dedafc4238555b6b0f910f2abf12983f20f871860914e
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -o calico.yaml \
-          "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
+        for attempt in 1 2 3; do
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/projectcalico/calico/contents/manifests/calico.yaml?ref=${CALICO_VERSION}" > calico.yaml && break
+          [ "$attempt" = 3 ] && exit 1
+          sleep 10
+        done
         echo "${CALICO_SHA256}  calico.yaml" | sha256sum -c -
         kubectl apply -f calico.yaml
         # Ubuntu runners use loose reverse path filtering, which Felix

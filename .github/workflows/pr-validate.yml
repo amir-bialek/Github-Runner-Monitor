@@ -82,11 +82,15 @@ jobs:
           fetch-depth: 0
 
       - name: Install gitleaks
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
           tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -O "${base}/${tarball}"
-          curl -sSfL --retry 5 --retry-delay 10 --retry-all-errors -O "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          for attempt in 1 2 3; do
+            gh release download "v${GITLEAKS_VERSION}" -R gitleaks/gitleaks -p "${tarball}" -p "gitleaks_${GITLEAKS_VERSION}_checksums.txt" --clobber && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 10
+          done
           set -o pipefail
           grep " ${tarball}\$" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum -c -
           tar -xzf "${tarball}" gitleaks
