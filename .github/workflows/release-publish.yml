@@ -2,30 +2,23 @@ name: Release Publish
 
 # Story 8.1 (FR36, FR37, AD-15): one version X.Y.Z for every artifact. The
 # backend, frontend and Debug Job images are published to one repository as
-# backend-vX.Y.Z, frontend-vX.Y.Z and debug-job-vX.Y.Z, then a release commit
-# sets helm/chart/Chart.yaml version and appVersion to X.Y.Z and is tagged vX.Y.Z.
+# backend-vX.Y.Z, frontend-vX.Y.Z and debug-job-vX.Y.Z, then the commit they
+# were built from is tagged vX.Y.Z.
 # Story 8.5 (FR38, FR39): prepare refuses a version with no CHANGELOG.md
 # section or no docs/images/vMAJOR screenshot, and after the push the release
 # job creates GitHub Release vX.Y.Z with that section as notes and the
 # screenshots as assets.
 
 on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: 'Version bump'
-        type: choice
-        options:
-          - major
-          - minor
-          - patch
-        default: patch
+  push:
+    branches: [main]
 
 env:
   REPO: bialekamir/github-runner-monitor
 
-# Two dispatches would compute the same version and overwrite each other's
-# images; run releases one after the other.
+# Two merges close together would publish their images in parallel; run
+# releases one after the other. GitHub keeps only one pending run, so a
+# third merge cancels the second's run: re-run it with "Re-run all jobs".
 concurrency:
   group: release-publish
   cancel-in-progress: false
@@ -44,29 +37,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Compute version
+      - name: Check the version
+        # Fails before anything is built or published when the version
+        # files disagree, tag vX.Y.Z exists, CHANGELOG.md has no '## X.Y.Z'
+        # section or docs/images/vMAJOR has no screenshot.
         id: version
-        env:
-          BUMP: ${{ inputs.bump }}
-          REF: ${{ github.ref }}
         run: |
-          VERSION="$(bash .github/scripts/release-version.sh "$BUMP" "$REF")"
+          VERSION="$(bash .github/scripts/release-version.sh)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing v$VERSION"
-
-      - name: Check release notes and screenshots
-        # Fails before anything is built or published when CHANGELOG.md has
-        # no '## X.Y.Z' section or docs/images/vMAJOR has no screenshot.
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          bash .github/scripts/release-notes.sh "$VERSION" >/dev/null
-          bash .github/scripts/release-notes.sh "$VERSION" --images
 
   attack-tests:
     # Story 7.1, 7.2, 7.3, 7.4: nothing is published unless the attack tests
     # pass (isolation, agent, github and leak jobs). Runs only once prepare
-    # has accepted the ref and the bump.
+    # has accepted the version.
     needs: prepare
     uses: ./.github/workflows/attack-tests.yml
     secrets:
@@ -122,10 +106,8 @@ jobs:
           tags: ${{ env.REPO }}:${{ env.TYPE }}-v${{ env.VERSION }},${{ env.REPO }}:${{ env.TYPE }}-latest
 
   release:
-    # Runs only after all three images are published. Makes the release
-    # commit (Chart.yaml version and appVersion only) on the commit the images
-    # were built from, tags it, and pushes both atomically: if main moved, the
-    # push is rejected as non-fast-forward and nothing is pushed.
+    # Runs only after all three images are published. Tags the commit the
+    # images were built from and pushes the tag.
     needs: [prepare, publish]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -139,22 +121,11 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Set chart version
+      - name: Tag and push
         run: |
-          sed -i -E "s/^version: .*/version: $VERSION/; s/^appVersion: .*/appVersion: $VERSION/" helm/chart/Chart.yaml
-          grep -qx "version: $VERSION" helm/chart/Chart.yaml
-          grep -qx "appVersion: $VERSION" helm/chart/Chart.yaml
-          git diff --stat
-
-      - name: Commit, tag and push
-        run: |
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add helm/chart/Chart.yaml
-          git commit -m "Release v$VERSION"
           git tag "v$VERSION"
-          if ! git push --atomic origin HEAD:refs/heads/main "refs/tags/v$VERSION"; then
-            echo "::error::Push of the release commit and tag v$VERSION was rejected (main moved, or a rule blocked it); nothing was pushed. The images for v$VERSION are already published." >&2
+          if ! git push origin "refs/tags/v$VERSION"; then
+            echo "::error::Push of tag v$VERSION was rejected; nothing was pushed. The images for v$VERSION are already published." >&2
             exit 1
           fi
 
@@ -170,12 +141,7 @@ jobs:
         run: |
           notes="$RUNNER_TEMP/release-notes.md"
           bash .github/scripts/release-notes.sh "$VERSION" | LINK_BASE="$LINK_BASE" perl -pe 's#\]\((?![A-Za-z][A-Za-z0-9+.-]*:|\#|/)#]($ENV{LINK_BASE}#g' >"$notes"
-          images_list="$(bash .github/scripts/release-notes.sh "$VERSION" --images)"
-          mapfile -t images <<<"$images_list"
-          if [ -z "$images_list" ] || [ "${#images[@]}" -eq 0 ]; then
-            echo "::error::No screenshot found for v$VERSION; the tag is pushed but no GitHub Release was created." >&2
-            exit 1
-          fi
+          mapfile -t images < <(bash .github/scripts/release-notes.sh "$VERSION" --images)
           if ! gh release create "v$VERSION" --verify-tag --title "v$VERSION" --notes-file "$notes" "${images[@]}"; then
             echo "::error::Tag v$VERSION is pushed but creating its GitHub Release failed. Do not rerun the workflow (the tag exists). From a checkout of v$VERSION, run: bash .github/scripts/release-notes.sh $VERSION > notes.md && gh release create v$VERSION --verify-tag --title v$VERSION --notes-file notes.md \$(bash .github/scripts/release-notes.sh $VERSION --images)" >&2
             exit 1

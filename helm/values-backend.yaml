@@ -9,11 +9,8 @@ deployment:
   labels:
     app: github-runner-monitor-backend
   image:
-    # Replace with the published image, e.g. bialekamir/github-runner-monitor.
-    # That repository has no plain latest tag: with it, set tag to
-    # backend-vX.Y.Z (or backend-latest).
-    name: ""
-    tag: latest
+    name: bialekamir/github-runner-monitor
+    tag: backend-v2.1.0
   resources:
     limits:
       cpu: 400m

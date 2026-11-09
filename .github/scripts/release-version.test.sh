@@ -13,12 +13,23 @@ failed=0
 pass() { passed=$((passed + 1)); echo "ok   - $1"; }
 fail() { failed=$((failed + 1)); echo "FAIL - $1"; [ $# -gt 1 ] && printf '%s\n' "$2" | sed 's/^/       /'; }
 
-# new_repo <name> <chart version> [tags...]: a repository with one commit.
+# set_version <dir> <version>: Chart.yaml, both values files and a CHANGELOG.md
+# section all carry <version>.
+set_version() {
+  local dir="$1" version="$2"
+  mkdir -p "$dir/helm/chart" "$dir/docs/images/v${version%%.*}"
+  printf 'apiVersion: v2\nappVersion: %s\nname: app\nversion: %s\n' "$version" "$version" >"$dir/helm/chart/Chart.yaml"
+  printf 'deployment:\n  image:\n    name: x\n    tag: backend-v%s\ndebugIt:\n  jobImage:\n    tag: ""\n' "$version" >"$dir/helm/values-backend.yaml"
+  printf 'deployment:\n  image:\n    name: x\n    tag: frontend-v%s\n' "$version" >"$dir/helm/values-frontend.yaml"
+  printf '# Changelog\n\n## %s\n\nNotes.\n' "$version" >"$dir/CHANGELOG.md"
+  touch "$dir/docs/images/v${version%%.*}/screen.png"
+}
+
+# new_repo <name> <version> [tags...]: a repository with one commit.
 new_repo() {
-  local dir="$work/$1" chart_version="$2"
+  local dir="$work/$1"
+  set_version "$dir" "$2"
   shift 2
-  mkdir -p "$dir/helm/chart"
-  printf 'apiVersion: v2\nappVersion: %s\nname: app\nversion: %s\n' "$chart_version" "$chart_version" >"$dir/helm/chart/Chart.yaml"
   git -C "$dir" init -q
   git -C "$dir" -c user.email=t@example.com -c user.name=test add .
   git -C "$dir" -c user.email=t@example.com -c user.name=test commit -q -m init
@@ -27,60 +38,72 @@ new_repo() {
   echo "$dir"
 }
 
-expect_version() { # name, repo, bump, ref, expected
+expect_version() { # name, repo, expected, [base ref]
   local out
-  if out="$(cd "$2" && bash "$script" "$3" "$4" 2>&1)" && [ "$out" = "$5" ]; then
+  if out="$(cd "$2" && bash "$script" ${4:+"$4"} 2>&1)" && [ "$out" = "$3" ]; then
     pass "$1"
   else
-    fail "$1 (expected $5)" "$out"
+    fail "$1 (expected $3)" "$out"
   fi
 }
 
-expect_refused() { # name, repo, bump, ref, message fragment
+expect_refused() { # name, repo, message fragment, [base ref]
   local out
-  if out="$(cd "$2" && bash "$script" "$3" "$4" 2>&1)"; then
+  if out="$(cd "$2" && bash "$script" ${4:+"$4"} 2>&1)"; then
     fail "$1 (succeeded, should have failed)" "$out"
-  elif [ "$(wc -l <<<"$out")" -eq 1 ] && grep -qF -- "$5" <<<"$out"; then
+  elif [ "$(wc -l <<<"$out")" -eq 1 ] && grep -qF -- "$3" <<<"$out"; then
     pass "$1"
   else
-    fail "$1 (message does not name '$5' on one line)" "$out"
+    fail "$1 (message does not name '$3' on one line)" "$out"
   fi
 }
 
-main=refs/heads/main
+first="$(new_repo first 2.1.0 backend-v1.0.5 frontend-v1.0.2)"
+expect_version "first release, no vX.Y.Z tag" "$first" 2.1.0
 
-first="$(new_repo first 1.0.0 backend-v1.0.5 frontend-v1.0.2)"
-expect_version "first release, major from Chart.yaml 1.0.0" "$first" major "$main" 2.0.0
-expect_version "first release, minor from Chart.yaml 1.0.0" "$first" minor "$main" 1.1.0
-expect_version "first release, patch from Chart.yaml 1.0.0" "$first" patch "$main" 1.0.1
+quoted="$(new_repo quoted 2.1.0)"
+sed -i 's/^version: .*/version: "2.1.0"/' "$quoted/helm/chart/Chart.yaml"
+sed -i 's/tag: frontend-v2.1.0/tag: frontend-v2.1.0 # pinned/' "$quoted/helm/values-frontend.yaml"
+expect_version "quoted version and comment after tag" "$quoted" 2.1.0
 
-later="$(new_repo later 1.0.0 v2.0.0 v2.1.0 v2.0.9 v10.0.0-rc1)"
-expect_version "later patch from highest tag" "$later" patch "$main" 2.1.1
-expect_version "later minor from highest tag" "$later" minor "$main" 2.2.0
-expect_version "later major from highest tag" "$later" major "$main" 3.0.0
+exists="$(new_repo exists 2.1.0 v2.1.0)"
+expect_refused "tag already exists" "$exists" "Tag v2.1.0 already exists"
 
-sorted="$(new_repo sorted 1.0.0 v2.9.0 v2.10.0)"
-expect_version "versions sort numerically" "$sorted" patch "$main" 2.10.1
+# A pull request on top of main at 2.1.0.
+pr="$(new_repo pr 2.1.0)"
+set_version "$pr" 2.10.0
+expect_version "higher than main, compared numerically" "$pr" 2.10.0 HEAD
+set_version "$pr" 2.1.0
+expect_refused "same as main" "$pr" "not higher than 2.1.0 on main" HEAD
+set_version "$pr" 2.0.5
+expect_refused "lower than main" "$pr" "not higher than 2.1.0 on main" HEAD
 
-quoted="$(new_repo quoted 1.0.0)"
-sed -i 's/^version: .*/version: "1.0.0"/' "$quoted/helm/chart/Chart.yaml"
-expect_version "quoted Chart.yaml version" "$quoted" major "$main" 2.0.0
+app="$(new_repo app 2.1.0)"
+sed -i 's/^appVersion: .*/appVersion: 2.0.0/' "$app/helm/chart/Chart.yaml"
+expect_refused "appVersion differs" "$app" "appVersion '2.0.0' is not version '2.1.0'"
 
-zero="$(new_repo zero 1.0.0 v1.08.0)"
-expect_version "leading zero read as decimal, patch" "$zero" patch "$main" 1.8.1
-expect_version "leading zero read as decimal, minor" "$zero" minor "$main" 1.9.0
+backend="$(new_repo backend 2.1.0)"
+sed -i 's/backend-v2.1.0/backend-v2.0.0/' "$backend/helm/values-backend.yaml"
+expect_refused "backend tag differs" "$backend" "is not 'backend-v2.1.0'"
+
+frontend="$(new_repo frontend 2.1.0)"
+sed -i 's/frontend-v2.1.0/latest/' "$frontend/helm/values-frontend.yaml"
+expect_refused "frontend tag differs" "$frontend" "is not 'frontend-v2.1.0'"
+
+notes="$(new_repo notes 2.1.0)"
+printf '# Changelog\n\n## 2.0.0\n\nNotes.\n' >"$notes/CHANGELOG.md"
+expect_refused "no CHANGELOG.md section" "$notes" "2.1.0"
+
+images="$(new_repo images 3.0.0)"
+rm -r "$images/docs/images/v3"
+expect_refused "no screenshot for the major version" "$images" "docs/images/v3"
 
 short="$(new_repo short 1.0)"
-expect_refused "Chart.yaml version not X.Y.Z" "$short" major "$main" "is not X.Y.Z"
+expect_refused "Chart.yaml version not X.Y.Z" "$short" "is not X.Y.Z"
 
-nochart="$(new_repo nochart 1.0.0)"
-git -C "$nochart" rm -q -r helm
-expect_refused "no tag and no Chart.yaml" "$nochart" major "$main" "no helm/chart/Chart.yaml"
-
-expect_refused "invalid bump" "$first" huge "$main" "use major, minor or patch"
-expect_refused "empty bump" "$first" "" "$main" "use major, minor or patch"
-expect_refused "not main" "$first" patch refs/heads/feature "Release runs only from main"
-expect_refused "tag ref" "$first" patch refs/tags/v2.0.0 "Release runs only from main"
+nochart="$(new_repo nochart 2.1.0)"
+rm "$nochart/helm/chart/Chart.yaml"
+expect_refused "no Chart.yaml" "$nochart" "No helm/chart/Chart.yaml"
 
 echo "# $passed passed, $failed failed"
 [ "$failed" -eq 0 ]

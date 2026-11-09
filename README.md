@@ -614,4 +614,16 @@ npx vitest run
 
 What changed in each version, and what to do when upgrading, is in [CHANGELOG.md](CHANGELOG.md). Each release also creates a GitHub Release `vX.Y.Z` holding that version's section of the changelog and its major version's screenshots.
 
-The screenshots for a major version live in `docs/images/vN` (`v1` for 1.x, `v2` for 2.x). They are taken from the demo with [docs/images/capture-screenshots.mjs](docs/images/capture-screenshots.mjs), a Playwright script that is run by hand, not in CI; its first lines say how. A release refuses to start when `CHANGELOG.md` has no section for the new version or its major version has no screenshot folder.
+The screenshots for a major version live in `docs/images/vN` (`v1` for 1.x, `v2` for 2.x). They are taken from the demo with [docs/images/capture-screenshots.mjs](docs/images/capture-screenshots.mjs), a Playwright script that is run by hand, not in CI; its first lines say how.
+
+### Releasing a new version
+
+Every merge to `main` is a release, so every pull request sets a new version `X.Y.Z`, higher than the one on `main`, in these places:
+
+1. `helm/chart/Chart.yaml`: `version: X.Y.Z` and `appVersion: X.Y.Z`.
+2. `helm/values-backend.yaml`: `tag: backend-vX.Y.Z`.
+3. `helm/values-frontend.yaml`: `tag: frontend-vX.Y.Z`.
+4. `CHANGELOG.md`: a new `## X.Y.Z` section at the top.
+5. For a new major version N only: its screenshots in `docs/images/vN`.
+
+For example, after `v2.1.0` a fix is `2.1.1` and a new feature is `2.2.0`. PR Validate fails until all of these match and the version is higher than the one on `main`. After the merge, Release Publish pushes the images `backend-vX.Y.Z`, `frontend-vX.Y.Z` and `debug-job-vX.Y.Z` to `bialekamir/github-runner-monitor`, tags the commit `vX.Y.Z` and creates the GitHub Release.
