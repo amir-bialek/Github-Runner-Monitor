@@ -42,6 +42,10 @@ fi
 
 if [ -n "${1:-}" ]; then
   base="$(git show "$1:helm/chart/Chart.yaml" | read_value version)"
+  if git tag -l 'v*' | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    && ! git rev-parse -q --verify "refs/tags/v$base" >/dev/null; then
+    refuse "Version $base on main was never released (no tag v$base): re-run its Release Publish, then re-run this check."
+  fi
   if [ "$(printf '%s\n%s\n' "$version" "$base" | sort -V | tail -n1)" = "$base" ]; then
     refuse "Version $version is not higher than $base on main: raise it in Chart.yaml and both values files."
   fi

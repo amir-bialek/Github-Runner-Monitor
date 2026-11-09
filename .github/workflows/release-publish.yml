@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      latest: ${{ steps.version.outputs.latest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -46,6 +47,8 @@ jobs:
           VERSION="$(bash .github/scripts/release-version.sh)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing v$VERSION"
+          highest="$( { git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//'; echo "$VERSION"; } | sort -V | tail -n1)"
+          echo "latest=$([ "$highest" = "$VERSION" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   attack-tests:
     # Story 7.1, 7.2, 7.3, 7.4: nothing is published unless the attack tests
@@ -103,7 +106,8 @@ jobs:
           file: ${{ matrix.file }}
           build-args: ${{ matrix.build-args }}
           push: true
-          tags: ${{ env.REPO }}:${{ env.TYPE }}-v${{ env.VERSION }},${{ env.REPO }}:${{ env.TYPE }}-latest
+          # A re-run of an older release does not move <type>-latest back.
+          tags: ${{ env.REPO }}:${{ env.TYPE }}-v${{ env.VERSION }}${{ needs.prepare.outputs.latest == 'true' && format(',{0}:{1}-latest', env.REPO, env.TYPE) || '' }}
 
   release:
     # Runs only after all three images are published. Tags the commit the

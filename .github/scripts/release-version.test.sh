@@ -78,6 +78,13 @@ expect_refused "same as main" "$pr" "not higher than 2.1.0 on main" HEAD
 set_version "$pr" 2.0.5
 expect_refused "lower than main" "$pr" "not higher than 2.1.0 on main" HEAD
 
+# Main at 2.2.0 whose release never finished, after v2.1.0.
+unreleased="$(new_repo unreleased 2.2.0 v2.1.0)"
+set_version "$unreleased" 2.3.0
+expect_refused "main's version never released" "$unreleased" "2.2.0 on main was never released" HEAD
+git -C "$unreleased" tag v2.2.0
+expect_version "main's version released" "$unreleased" 2.3.0 HEAD
+
 app="$(new_repo app 2.1.0)"
 sed -i 's/^appVersion: .*/appVersion: 2.0.0/' "$app/helm/chart/Chart.yaml"
 expect_refused "appVersion differs" "$app" "appVersion '2.0.0' is not version '2.1.0'"
