@@ -104,7 +104,7 @@ afterEach(() => {
 });
 
 describe('side panel on a wide window', () => {
-  test('holds the heading, the items in order, then the theme switch and the account; no header', async () => {
+  test('holds the heading with the theme switch, the items in order, then the account; no header', async () => {
     vi.mocked(api.fetchSession).mockResolvedValue(ADMINISTRATOR);
     const { container } = renderApp();
     await screen.findByRole('button', { name: 'Sign out' });
@@ -112,7 +112,7 @@ describe('side panel on a wide window', () => {
     const nav = panel();
     const heading = within(nav).getByRole('heading', { level: 1 });
     expect(heading).toHaveTextContent(APP_HEADING);
-    expect(controls(nav)).toEqual(['Dashboard', 'Alerts', 'Debug it settings', 'Security', THEME, 'Sign out']);
+    expect(controls(nav)).toEqual([THEME, 'Dashboard', 'Alerts', 'Debug it settings', 'Security', 'Sign out']);
     expect(heading.compareDocumentPosition(within(nav).getByRole('button', { name: 'Dashboard' })) &
       Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelector('header')).toBeNull();
@@ -122,31 +122,31 @@ describe('side panel on a wide window', () => {
   });
 
   test.each<[string, () => void, string[], boolean]>([
-    ['Debug it disabled', () => {}, ['Alerts', THEME], false],
-    ['session loading', () => vi.mocked(api.fetchSession).mockReturnValue(new Promise(() => {})), ['Alerts', THEME], false],
-    ['session failed', () => vi.mocked(api.fetchSession).mockRejectedValue(new Error('down')), ['Alerts', THEME], false],
+    ['Debug it disabled', () => {}, [THEME, 'Alerts'], false],
+    ['session loading', () => vi.mocked(api.fetchSession).mockReturnValue(new Promise(() => {})), [THEME, 'Alerts'], false],
+    ['session failed', () => vi.mocked(api.fetchSession).mockRejectedValue(new Error('down')), [THEME, 'Alerts'], false],
     [
       'signed out, debug-it-only',
       () => vi.mocked(api.fetchSession).mockResolvedValue({ state: 'signed-out', loginScope: 'debug-it-only' }),
-      ['Dashboard', 'Alerts', 'Security', THEME, 'Sign in'],
+      [THEME, 'Dashboard', 'Alerts', 'Security', 'Sign in'],
       true,
     ],
     [
       'signed in',
       () => vi.mocked(api.fetchSession).mockResolvedValue(SIGNED_IN),
-      ['Dashboard', 'Alerts', 'Security', THEME, 'Sign out'],
+      [THEME, 'Dashboard', 'Alerts', 'Security', 'Sign out'],
       true,
     ],
     [
       'administrator',
       () => vi.mocked(api.fetchSession).mockResolvedValue(ADMINISTRATOR),
-      ['Dashboard', 'Alerts', 'Debug it settings', 'Security', THEME, 'Sign out'],
+      [THEME, 'Dashboard', 'Alerts', 'Debug it settings', 'Security', 'Sign out'],
       true,
     ],
     [
       'personal key mode',
       () => vi.mocked(api.fetchSession).mockResolvedValue(PERSONAL),
-      ['Dashboard', 'Alerts', 'Security', THEME, 'Personal key', 'Sign out'],
+      [THEME, 'Dashboard', 'Alerts', 'Security', 'Sign out', 'Personal key'],
       true,
     ],
   ])('%s: exactly the expected controls', async (_name, arrange, expected, debugIt) => {
@@ -268,7 +268,7 @@ describe('top bar and drawer on a narrow window', () => {
     await user.click(menu);
     const nav = await screen.findByRole('navigation', { name: 'Main' });
     await within(nav).findByRole('button', { name: 'Security' });
-    expect(controls(nav)).toEqual(['Dashboard', 'Alerts', 'Debug it settings', 'Security', THEME, 'Sign out']);
+    expect(controls(nav)).toEqual([THEME, 'Dashboard', 'Alerts', 'Debug it settings', 'Security', 'Sign out']);
     // The drawer's heading is not a second h1.
     expect(screen.getAllByRole('heading', { level: 1, hidden: true })).toHaveLength(1);
 
@@ -284,7 +284,7 @@ describe('top bar and drawer on a narrow window', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open menu' }));
     const nav = await screen.findByRole('navigation', { name: 'Main' });
-    expect(controls(nav)).toEqual(['Alerts', THEME]);
+    expect(controls(nav)).toEqual([THEME, 'Alerts']);
 
     await user.click(within(nav).getByRole('button', { name: 'Alerts' }));
     expect(await screen.findByRole('heading', { name: 'Alerts:' })).toBeInTheDocument();

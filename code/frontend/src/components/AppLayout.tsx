@@ -162,29 +162,25 @@ const Panel: React.FC<PanelProps> = ({
   }
 
   return (
-    <Box
-      component="nav"
-      aria-label="Main"
-      sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
-    >
-      <Box sx={{ px: 2, pt: 2.5, pb: 1.5 }}>
-        <Typography variant="h6" component={headingComponent} sx={{ fontWeight: 700, lineHeight: 1.3, m: 0 }}>
+    <Box component="nav" aria-label="Main" sx={{ pb: account ? 0 : 1.5 }}>
+      <Box sx={{ px: 2, pt: 2.5, pb: 1.5, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+        <Typography variant="h6" component={headingComponent} sx={{ fontWeight: 700, lineHeight: 1.3, m: 0, flex: 1, minWidth: 0 }}>
           {heading}
         </Typography>
+        {themeToggle}
       </Box>
 
       {rows.length > 0 && <List sx={{ px: 1, py: 0, display: 'grid', gap: 0.25 }}>{rows}</List>}
 
-      <Box sx={{ mt: 'auto', pt: 2 }}>
-        <Divider />
-        <Box sx={{ px: 2, py: 2, display: 'grid', gap: 2, justifyItems: 'start' }}>
-          {themeToggle}
-          {account &&
-            (account.session.state === 'signed-out' ? (
+      {account && (
+        <>
+          <Divider sx={{ mt: 1.5 }} />
+          <Box sx={{ px: 2, py: 2, display: 'grid', gap: 1.25, justifyItems: 'start' }}>
+            {account.session.state === 'signed-out' ? (
               <SignInLink />
             ) : (
-              <Box sx={{ display: 'grid', gap: 1.25, width: '100%' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+              <>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, width: '100%' }}>
                   <Avatar aria-hidden sx={{ width: 32, height: 32, fontSize: 15, fontWeight: 700, bgcolor: 'primary.main' }}>
                     {account.session.login.charAt(0).toUpperCase()}
                   </Avatar>
@@ -192,42 +188,41 @@ const Panel: React.FC<PanelProps> = ({
                     component="span"
                     noWrap
                     title={account.session.login}
-                    sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary', minWidth: 0 }}
+                    sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary', minWidth: 0, flex: 1 }}
                   >
                     <Box component="span" sx={visuallyHidden}>
                       Signed in as{' '}
                     </Box>
                     {account.session.login}
                   </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {account.personalKey && (
-                    <Button
-                      variant="outlined"
-                      color="inherit"
-                      size="small"
-                      onClick={choose(account.personalKey.onOpen)}
-                      aria-haspopup="dialog"
-                      sx={pillSx}
-                    >
-                      Personal key
-                    </Button>
-                  )}
                   <Button
                     variant="outlined"
                     color="inherit"
                     size="small"
                     onClick={choose(account.onSignOut)}
                     disabled={account.signingOut}
-                    sx={pillSx}
+                    sx={(theme) => ({ ...pillSx(theme), flex: 'none' })}
                   >
                     Sign out
                   </Button>
                 </Box>
-              </Box>
-            ))}
-        </Box>
-      </Box>
+                {account.personalKey && (
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    size="small"
+                    onClick={choose(account.personalKey.onOpen)}
+                    aria-haspopup="dialog"
+                    sx={pillSx}
+                  >
+                    Personal key
+                  </Button>
+                )}
+              </>
+            )}
+          </Box>
+        </>
+      )}
     </Box>
   );
 };

@@ -27,9 +27,9 @@
 //
 // It writes, at twice the pixel density, in the light theme:
 //   dashboard-light.png   the whole dashboard, signed in as the demo user
-//   side-panel.png        the side panel (nav "Main"): the heading, Dashboard,
-//                         Alerts, Debug it settings, Security, the theme
-//                         switch, the signed in user and Sign out
+//   side-panel.png        the side panel (nav "Main"): the heading and the
+//                         theme switch, Dashboard, Alerts, Debug it settings,
+//                         Security, the signed in user and Sign out
 //   alerts-popover.png    the side panel with the Alerts window open beside it
 //   alert-settings.png    the Alert settings dialog
 //   security-page.png     the Security page
@@ -87,6 +87,7 @@ try {
   await page.goto(baseUrl);
   await page.getByRole('link', { name: 'Sign in', exact: true }).click();
   await page.getByRole('button', { name: 'Sign out' }).waitFor();
+  await page.mouse.move(1500, 890);
   await page.getByRole('button', { name: /^Debug it:/ }).first().waitFor();
   await page.waitForLoadState('networkidle');
 
