@@ -2,6 +2,12 @@
 
 What changed in each version of GitHub Runner Monitor, newest first, with the steps to take when upgrading. Each release from 2.1.0 on is also a GitHub Release, `vX.Y.Z`, holding its section of this file and the screenshots of its major version.
 
+## 2.1.2
+
+### What changed
+
+- **README corrections.** The README's opening sentence now describes both the monitoring and Debug it, and the README lists every Debug it environment variable and API route, gives the right USE_MOCK_DATA default, and says which .env variables Docker Compose passes on.
+
 ## 2.1.1
 
 ### What changed
