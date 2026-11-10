@@ -1,6 +1,8 @@
 # GitHub Runner Monitor
 
-A live dashboard for self-hosted GitHub Actions runners. It shows how many runners are free, busy or offline in each pool, which jobs are waiting and in what order, what is running now, and what finished recently. It also alerts when a job has waited too long or a runner pool has gone dark. Every job links out to GitHub for the full detail.
+A dashboard that monitors a GitHub organisation's Actions jobs and self-hosted runners, and debugs failed jobs: Claude explains why a job failed and suggests a fix you can open as a draft pull request.
+
+It shows how many runners are free, busy or offline in each pool, which jobs are waiting and in what order, what is running now, and what finished recently. It alerts when a job has waited too long or a runner pool has gone dark. Every job links out to GitHub for the full detail.
 
 <details open>
 <summary>Table of Contents</summary>
@@ -61,7 +63,7 @@ To stop it:
 docker compose -f docker/docker-compose.yml down
 ```
 
-To point it at a real organisation, copy `.env.example` to `.env` and fill it in. `.env` is ignored by git, so your token cannot be committed by accident. Docker Compose reads that file and passes the values into the backend container. Every name in it is explained in [Configuration](#configuration); you can leave the whole file alone while you are on made-up data.
+To point it at a real organisation, copy `.env.example` to `.env` and fill it in. `.env` is ignored by git, so your token cannot be committed by accident. Docker Compose reads that file and passes only the variables named in `docker/docker-compose.yml` into the containers; any other variable set in `.env` is ignored. Every name in it is explained in [Configuration](#configuration); you can leave the whole file alone while you are on made-up data.
 
 To run it on Kubernetes instead, see [helm/README.md](helm/README.md).
 
@@ -71,13 +73,13 @@ To run it on Kubernetes instead, see [helm/README.md](helm/README.md).
 - **Job queue** — every waiting job, longest wait first, with the pool each is waiting for. Jobs GitHub named no pool for say "Unknown". GitHub does not publish a real queue position, so this order is worked out from when each job was created. The page says so.
 - **Running jobs** — what is on a runner at this moment and for how long.
 - **Recent history** — finished jobs with pass or fail, and the time each one finished, as supporting detail.
-- **Alerts** — the item in the side panel counts jobs stuck in the queue and runner pools with no online runner. Click it for the list. See [Alerts](#alerts).
+- **Alerts** — the item in the side panel counts the active alerts: one for each pool with jobs stuck in the queue, and one for each pool with no online runner. Click it for the list. See [Alerts](#alerts).
 
 A job that ran on one of GitHub's own cloud runners, rather than a self-hosted one, shows its pool as "GitHub Actions (cloud)".
 
 Every job shows its repository and its branch in their own columns, who started it, and what triggered it, so you can find your own row among jobs that otherwise look identical. The organisation name is left off the repository — every repository on the page belongs to the same one. The job name, the repository and the branch each link out to github.com in a new tab. A job whose branch GitHub did not report says "unknown" instead, with nothing to click.
 
-Click any column heading to sort the table by that column, and click it again to reverse it. Sorting only reorders rows — nothing is hidden.
+Click any column heading except Debug it to sort the table by that column, and click it again to reverse it. Sorting only reorders rows — nothing is hidden.
 
 The job queue and running jobs tables show 10 rows at a time and recent history shows 20, with previous/next arrows underneath and a "Show all" button that lists every row on one page instead.
 
@@ -92,13 +94,13 @@ Two alerts watch for trouble so you do not have to keep reading the tables:
 - **Jobs stuck in the queue** — a job has been waiting for a runner longer than the queue wait threshold (15 minutes unless you change it). There is one alert per pool, listing its stuck jobs longest first, each linking to GitHub. Jobs with no known pool get their own "unknown pool" alert.
 - **Runner group offline** — a pool has had no online runner for longer than the offline threshold (10 minutes unless you change it). A pool that vanishes from GitHub's runner list altogether counts too, for up to 7 days after it was last seen. If GitHub cannot be reached, offline alerts are left as they were instead of being raised or cleared on missing data.
 
-The **Alerts** item in the side panel shows how many alerts are active, and so does the browser tab title. Click it for the list: one line per stuck job and one per offline group, offline groups first, 10 lines per page. The backend checks every 30 seconds whether or not anyone has the page open.
+The **Alerts** item in the side panel shows how many alerts are active, and so does the browser tab title. Click it for the list: one line per stuck job (at most 20 per pool) and one per offline group, offline groups first, 10 lines per page. The backend checks every 30 seconds whether or not anyone has the page open.
 
 ![The Alerts window open beside the Alerts item in the side panel, listing an offline runner group and three waiting jobs.](docs/images/v2/alerts-popover.png)
 
 ### Changing the thresholds
 
-The starting values come from the deployment — the `ALERT_*` variables below, set in Helm values or `.env`. After that, anyone with the page open can change them from **Alert settings** in the Alerts window (open it with **Alerts** in the side panel): turn each alert on or off, change its threshold in minutes, and set or remove a webhook.
+The starting values come from the deployment — the `ALERT_*_ENABLED`, `ALERT_*_MINUTES`, `ALERT_WEBHOOK_URL` and `ALERT_SETTINGS_EDITABLE` variables below, set in Helm values or `.env`. After that, anyone with the page open can change them from **Alert settings** in the Alerts window (open it with **Alerts** in the side panel): turn each alert on or off, change its threshold in minutes, and set or remove a webhook.
 
 ![The Alert settings dialog, as a Debug it administrator sees it.](docs/images/v2/alert-settings.png)
 
@@ -120,7 +122,7 @@ By default alerts are shown on screen only. Add a webhook URL and the backend al
 
 `event` is `alert.fired` or `alert.resolved`. The `text` field means a Slack or Microsoft Teams incoming webhook can take it as is. **Send test** in the dialog posts a test message. The dialog only ever shows the webhook's host, since the rest of such a URL is usually the secret, and it shows the last delivery's result.
 
-The dashboard has no login, so anyone who can open the page can change where the webhook points. If that matters where you run it, set the webhook from Helm and set `ALERT_SETTINGS_EDITABLE=false`. With Debug it enabled, only Debug it administrators (signed in, with the CSRF token) can change, reset or test the alert settings; everyone else gets 401 or 403.
+With Debug it off the dashboard has no login, so anyone who can open the page can change where the webhook points. If that matters where you run it, set the webhook from Helm and set `ALERT_SETTINGS_EDITABLE=false`. With Debug it enabled, only Debug it administrators (signed in, with the CSRF token) can change, reset or test the alert settings; everyone else gets 401 or 403. Set `debugIt.loginScope: whole-dashboard` to make every page need a sign in, not only Debug it.
 
 ## Using real GitHub data
 
@@ -461,7 +463,7 @@ Every setting below is an environment variable read by the backend container. Th
 
 | Variable | Default | What it does |
 |---|---|---|
-| `USE_MOCK_DATA` | `true` | `true` serves made-up data and needs no token. Set to `false` for a real organisation. |
+| `USE_MOCK_DATA` | `false` (`true` in Docker Compose) | `true` serves made-up data and needs no token. Set to `false` for a real organisation. |
 | `GITHUB_TOKEN` | empty | The fine-grained token described above. Required when `USE_MOCK_DATA=false`. |
 | `GITHUB_ORGANIZATION` | empty | The organisation to read. Required when `USE_MOCK_DATA=false`. |
 | `GITHUB_WEBHOOK_SECRET` | empty | The shared secret on the organisation webhook. Every message GitHub posts is signed with it and anything that does not match is refused. With nothing set here the webhook route refuses everything, so an unconfigured deployment fails closed. Required when `USE_MOCK_DATA=false`. |
@@ -507,6 +509,40 @@ Every setting below is an environment variable read by the backend container. Th
 | `MAX_BATCH_SIZE` | `10` | Most requests gathered into one batch. |
 | `PORT` | `3001` | The backend port inside the container network. It is not published outside Docker. |
 
+### Debug it
+
+The Helm chart sets these on the backend from the `debugIt` values in [helm/values-backend.yaml](helm/values-backend.yaml). The cost telemetry variables are in [Cost telemetry](#cost-telemetry).
+
+| Variable | Helm value | Default | What it does |
+|---|---|---|---|
+| `DEBUG_IT_ENABLED` | `debugIt.enabled` | `false` | Turns Debug it on. |
+| `DEBUG_IT_PUBLIC_URL` | `debugIt.publicUrl` | empty | The address users open the dashboard on. Sign in returns here. |
+| `DEBUG_IT_CREDENTIALS_MODE` | `debugIt.credentialsMode` | `organization` | `organization` uses one Anthropic key for everyone; `personal` uses each user's own key. |
+| `DEBUG_IT_MONTHLY_CAP` | `debugIt.monthlyCap` | `5` | Debug runs per user per month with the organization key. |
+| `DEBUG_IT_LOGIN_SCOPE` | `debugIt.loginScope` | `debug-it-only` | `debug-it-only` needs a sign in only for Debug it; `whole-dashboard` needs one for every page except `/health` and the webhook. |
+| `DEBUG_IT_ADMINISTRATORS` | `debugIt.administrators` | empty | Comma-separated GitHub numeric user IDs of the administrators. |
+| `DEBUG_IT_ALLOWED_USERS` | `debugIt.allowedUsers` | empty | Starting list of GitHub numeric user IDs allowed to use Debug it. |
+| `DEBUG_IT_ALLOWED_REPOSITORIES` | `debugIt.allowedRepositories` | empty | Starting list of repositories, as `owner/name`, Debug it may run on. |
+| `DEBUG_IT_GITHUB_APP_ID` | `debugIt.githubApp.appId` | empty | The Debug it GitHub App's ID. |
+| `DEBUG_IT_GITHUB_APP_CLIENT_ID` | `debugIt.githubApp.clientId` | empty | The Debug it GitHub App's client ID. |
+| `DEBUG_IT_GITHUB_APP_PRIVATE_KEY` | `debugIt.githubApp.privateKeySecret` | empty | The App's private key, from a Secret. |
+| `DEBUG_IT_GITHUB_APP_CLIENT_SECRET` | `debugIt.githubApp.clientSecretSecret` | empty | The App's client secret, from a Secret. |
+| `DEBUG_IT_PERSONAL_KEY_ENCRYPTION_KEY` | `debugIt.encryptionSecret` | empty | Encrypts saved personal Anthropic keys, from a Secret. |
+| `DEBUG_IT_SESSION_ENCRYPTION_KEY` | `debugIt.encryptionSecret` | empty | Encrypts sign in sessions, from a Secret. |
+| `DEBUG_IT_ANTHROPIC_API_KEY` | `debugIt.anthropicApiKeySecret` | empty | The organization Anthropic API key, from a Secret. |
+| `DEBUG_IT_NAMESPACE` | `debugIt.debugNamespace` | `debug-it` | The namespace Debug Jobs run in. |
+| `DEBUG_JOB_IMAGE_TAG` | `debugIt.jobImage.tag` | `debug-job-v<chart appVersion>` | The Debug Job image tag. |
+| `DEBUG_IT_JOB_TEMPLATE` | rendered by the chart | empty | The Debug Job, as JSON, from the `debug-it-job-template` ConfigMap. |
+| `DEBUG_IT_CHECK_JOB_TEMPLATE` | rendered by the chart | empty | The startup check's test Job, as JSON, from the same ConfigMap. |
+| `DEBUG_IT_RESULTS_PORT` | `debugIt.resultsPort` | `3002` | The port Debug Jobs post their result to. |
+| `DEBUG_IT_MAX_CONCURRENT_RUNS` | `debugIt.limits.maxConcurrentRuns` | `3` | Debug runs allowed at once; more wait in the queue. |
+| `DEBUG_IT_MAX_RUNS_PER_USER` | `debugIt.limits.maxRunsPerUser` | `1` | Debug runs one user may have at once. |
+| `DEBUG_IT_TIME_LIMIT_MINUTES` | `debugIt.limits.timeLimitMinutes` | `15` | Longest a debug run may take. |
+| `DEBUG_IT_SPEND_LIMIT_USD` | `debugIt.limits.spendLimitUsd` | `2` | Most a debug run may spend on Anthropic, in US dollars. |
+| `DEBUG_IT_LOG_LIMIT_BYTES` | `debugIt.limits.logLimitBytes` | `2097152` | Largest part of the job log sent to the Debug Job. |
+| `DEBUG_IT_PATCH_LIMIT_BYTES` | `debugIt.limits.patchLimitBytes` | `102400` | Largest patch accepted. |
+| `DEBUG_IT_ORGANIZATION_MONTHLY_SPEND_LIMIT_USD` | `debugIt.limits.organizationMonthlySpendLimitUsd` | `0` | Most the organization key may spend per month, in US dollars. `0` means no limit. |
+
 ### Frontend
 
 The frontend is a static site, so its settings are not read at build time — they are written into a small `config.js` file every time the container starts, from these environment variables. That means they can be changed from Helm values (or plain `docker run -e`) without rebuilding the image.
@@ -523,6 +559,13 @@ The frontend is a static site, so its settings are not read at build time — th
 | `APP_RUNNERS_REFRESH_SECONDS` | `30` | How often the Available runners panel asks the backend again, in seconds. |
 
 `docker/docker-compose.yml` only wires `APP_HEADING` and `APP_TAB_TITLE` through by default; the rest can still be set on the frontend container directly, or from the Helm chart.
+
+Two more are not written into `config.js`:
+
+| Variable | Default | What it does |
+|---|---|---|
+| `VITE_API_URL` | `/api` | A build argument: the address the page calls the backend on. |
+| `BACKEND_URL` | `http://localhost:3001` | Read only by `npm run dev`: where the development server forwards `/api`. |
 
 ### Debug context file
 
@@ -585,6 +628,31 @@ The browser only ever calls paths starting with `/api`. Nginx passes them to the
 | `DELETE /api/settings/alerts` | Go back to the deployment values |
 | `POST /api/settings/alerts/test` | Send a test message to the webhook |
 | `POST /api/webhooks/github` | Where GitHub posts job events. Not for browser use — see [The webhook](#the-webhook). |
+| `GET /api/health` | The backend's status and job store counts |
+
+With Debug it enabled, these routes are added. All of them except the first four need a signed in user, and every change also needs the CSRF token:
+
+| Address | What it does |
+|---|---|
+| `GET /api/debug-it/sign-in` | Starts sign in with GitHub |
+| `GET /api/debug-it/callback` | Where GitHub returns after sign in |
+| `GET /api/debug-it/session` | The signed in user, or none |
+| `POST /api/debug-it/sign-out` | Signs out |
+| `GET /api/debug-it/settings` | Allowed users and repositories and the startup check result (administrators) |
+| `POST /api/debug-it/settings/repositories` | Allows a repository (administrators) |
+| `DELETE /api/debug-it/settings/repositories/:owner/:name` | Removes an allowed repository (administrators) |
+| `POST /api/debug-it/settings/users` | Allows a user (administrators) |
+| `DELETE /api/debug-it/settings/users/:githubUserId` | Removes an allowed user (administrators) |
+| `GET /api/debug-it/usage` | Debug it usage (administrators) |
+| `GET /api/debug-it/runs` | The user's latest debug runs and the allowed repositories |
+| `POST /api/debug-it/targets/:kind/:id/runs` | Starts a debug run on a failed job or workflow run |
+| `GET /api/debug-it/runs/:runId` | One debug run's status |
+| `GET /api/debug-it/runs/:runId/result` | One debug run's explanation and patch |
+| `PUT /api/debug-it/runs/:runId/feedback` | Rates a debug run's result |
+| `POST /api/debug-it/runs/:runId/pull-requests/:owner/:name` | Opens the fix pull request for one repository |
+| `GET`, `PUT`, `DELETE /api/debug-it/personal-key` | Reads, saves or deletes the user's own Anthropic key |
+
+Debug Jobs post their result to `POST /results/:runId` on `DEBUG_IT_RESULTS_PORT`, which is not reachable through `/api`.
 
 `/api/jobs/queue`, `/api/jobs/running`, `/api/jobs/history`, `/api/runners` and `/api/scale-sets` all accept `?scaleSet=<id>` to narrow the results to a single pool. `/api/jobs/history` also accepts `?limit=<n>`, capped by `HISTORY_MAX_LIMIT`.
 
